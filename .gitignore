@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.log
+runtime/chats/
+runtime/debug_snapshots/
+runtime/logs/
+runtime/state/
+runtime/palace/
+runtime/wakeup.txt
+runtime/wakeup.txt.bak

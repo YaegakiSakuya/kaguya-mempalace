@@ -1,0 +1,12 @@
+wing: app
+rooms:
+- name: llm
+  description: Files from llm/
+- name: bot
+  description: Files from bot/
+- name: memory
+  description: Files from memory/
+- name: core
+  description: Files from core/
+- name: general
+  description: Files that don't fit other rooms
