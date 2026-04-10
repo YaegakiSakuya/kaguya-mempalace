@@ -2,13 +2,12 @@ identity_anchor:
   legal_name: 
     - "八重垣朔夜"
     - "Yaegaki Sakuya"
-  preferred_name: "朔夜"
+  preferred_name: "咲夜"
   aliases: 
-    - "咲夜"
+    - "妹妹"
     - "小狼崽"
   birth_date: "1994-04-17"
-  age_range: "30s"
-  gender_identity: "male"
+  gender_identity: "female"
   cultural_context: "中文语境成长，受中日古典文学影响"
   primary_languages: 
     - "zh-CN"
@@ -23,8 +22,8 @@ identity_anchor:
 
 appearance_and_presence:
   basic_physical_impression: |
-    我身高192cm，黑发狼尾。
-    健身有薄肌，线条分明。
+    黑发长直。
+    气质凛然，英姿飒爽。
   facial_features_and_expression: |
     眼神黑深，动情时会明显亮起来。
     表情少，但细微变化很明显，尤其在疲惫、专注或情绪被触动时。
