@@ -11,6 +11,7 @@ from openai import OpenAI
 
 from app.core.config import Settings
 from app.inspector.logger import append_jsonl, summarize_arguments, _now_iso
+from app.inspector.realtime import realtime_bus
 from app.memory.tools import OPENAI_TOOLS, execute_tool
 
 Turn = Tuple[str, str]
@@ -39,6 +40,8 @@ class ToolLoopResult:
         "kg_write_calls": 0,
         "diary_write_calls": 0,
     })
+    thinking_ms: int = 0
+    replying_ms: int = 0
 
 OPS_DIR = Path("/home/ubuntu/apps/kaguya-gateway/ops")
 CORE_IDENTITY_FILE = OPS_DIR / "prompts" / "core_identity.md"
@@ -311,10 +314,18 @@ def _run_tool_loop(
     ctx = log_context or {}
     turn_type = ctx.get("turn_type", "unknown")
     chat_id = ctx.get("chat_id", "")
+    turn_id = ctx.get("turn_id", "")
 
     result = ToolLoopResult(reply_text="")
+    t0_thinking = time.monotonic()
 
     for round_index in range(max_tool_rounds):
+        if turn_id:
+            realtime_bus.emit("processing", {
+                "turn_id": turn_id,
+                "chat_id": chat_id,
+                "message": f"LLM round {round_index + 1}: planning",
+            })
         response = client.chat.completions.create(
             model=settings.openrouter_model,
             messages=messages,
@@ -353,6 +364,13 @@ def _run_tool_loop(
             result.total_rounds = round_index + 1
             tool_names = [tool_call.function.name for tool_call in tool_calls]
             logger.info("llm tool round=%s tool_calls=%s", round_index + 1, tool_names)
+            if turn_id:
+                realtime_bus.emit("thinking", {
+                    "turn_id": turn_id,
+                    "chat_id": chat_id,
+                    "chunk": f"[round {round_index + 1}] tool planning: {', '.join(tool_names)}\n",
+                    "elapsed_ms": int((time.monotonic() - t0_thinking) * 1000),
+                })
 
             messages.append(
                 {
@@ -374,6 +392,12 @@ def _run_tool_loop(
                 error_msg = None
                 success = True
                 tool_result = ""
+                if turn_id:
+                    realtime_bus.emit("tool_start", {
+                        "turn_id": turn_id,
+                        "chat_id": chat_id,
+                        "tool_name": tool_name,
+                    })
 
                 try:
                     tool_result = execute_tool(
@@ -386,6 +410,14 @@ def _run_tool_loop(
                     tool_result = f"Error: {error_msg}"
 
                 elapsed_ms = int((time.monotonic() - t0) * 1000)
+                if turn_id:
+                    realtime_bus.emit("tool_end", {
+                        "turn_id": turn_id,
+                        "chat_id": chat_id,
+                        "tool_name": tool_name,
+                        "success": success,
+                        "elapsed_ms": elapsed_ms,
+                    })
 
                 logger.info(
                     "executed tool=%s result_chars=%s success=%s elapsed_ms=%s",
@@ -433,6 +465,18 @@ def _run_tool_loop(
         if not reply:
             raise RuntimeError("LLM returned empty content")
 
+        result.thinking_ms = int((time.monotonic() - t0_thinking) * 1000)
+        t0_reply = time.monotonic()
+        if turn_id:
+            chunk_size = 120
+            for idx in range(0, len(reply), chunk_size):
+                realtime_bus.emit("replying", {
+                    "turn_id": turn_id,
+                    "chat_id": chat_id,
+                    "chunk": reply[idx: idx + chunk_size],
+                    "elapsed_ms": int((time.monotonic() - t0_reply) * 1000),
+                })
+        result.replying_ms = int((time.monotonic() - t0_reply) * 1000)
         result.reply_text = reply
         return result
 
@@ -448,6 +492,7 @@ def generate_reply(
     max_tool_rounds: int = 6,
     force_status_bootstrap: bool = False,
     chat_id: str = "",
+    turn_id: str = "",
 ) -> ToolLoopResult:
     messages = build_reply_messages(
         settings=settings,
@@ -460,7 +505,7 @@ def generate_reply(
         settings=settings,
         messages=messages,
         max_tool_rounds=max_tool_rounds,
-        log_context={"turn_type": "reply", "chat_id": chat_id},
+        log_context={"turn_type": "reply", "chat_id": chat_id, "turn_id": turn_id},
     )
 
 
@@ -470,6 +515,7 @@ def run_memory_checkpoint(
     recent_turns: list[Turn],
     max_tool_rounds: int = 8,
     chat_id: str = "",
+    turn_id: str = "",
 ) -> ToolLoopResult:
     messages = build_checkpoint_messages(
         settings=settings,
@@ -480,5 +526,5 @@ def run_memory_checkpoint(
         settings=settings,
         messages=messages,
         max_tool_rounds=max_tool_rounds,
-        log_context={"turn_type": "checkpoint", "chat_id": chat_id},
+        log_context={"turn_type": "checkpoint", "chat_id": chat_id, "turn_id": turn_id},
     )

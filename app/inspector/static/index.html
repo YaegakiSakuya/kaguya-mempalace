@@ -85,6 +85,12 @@ tr:hover td { background:var(--bg2); }
 /* Drawer detail */
 .drawer-detail { background:var(--bg2); border-radius:var(--radius); border:1px solid var(--border); padding:16px; margin-bottom:10px; }
 .drawer-detail pre { white-space:pre-wrap; word-break:break-word; font-size:.82rem; color:var(--text); }
+.panel { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:12px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.78rem; white-space:pre-wrap; word-break:break-word; }
+.tool-pill { display:inline-block; margin:2px 6px 2px 0; padding:2px 8px; border-radius:999px; font-size:.72rem; }
+.tool-pill.run { background:rgba(124,111,255,.2); color:#c9c3ff; }
+.tool-pill.ok { background:rgba(74,222,128,.2); color:var(--success); }
+.tool-pill.err { background:rgba(248,113,113,.2); color:var(--fail); }
 
 /* Responsive */
 @media (max-width:600px) {
@@ -551,6 +557,131 @@ function TraceTab() {
   );
 }
 
+function useRealtimeSSE() {
+  const [status, setStatus] = useState('idle');
+  const [processingText, setProcessingText] = useState('');
+  const [thinkingText, setThinkingText] = useState('');
+  const [replyText, setReplyText] = useState('');
+  const [thinkingMs, setThinkingMs] = useState(0);
+  const [replyingMs, setReplyingMs] = useState(0);
+  const [stats, setStats] = useState(null);
+  const [tools, setTools] = useState([]);
+
+  useEffect(() => {
+    let closed = false;
+    const token = getToken();
+    const url = `/api/realtime/stream?token=${encodeURIComponent(token)}`;
+    fetch('/api/realtime/current', { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then((cur) => {
+        if (!cur || closed) return;
+        setStatus(cur.status || 'idle');
+        setProcessingText((cur.processing_messages || []).join('\\n'));
+        setThinkingText(cur.thinking_text || '');
+        setReplyText(cur.reply_text || '');
+        setThinkingMs(cur.thinking_ms || 0);
+        setReplyingMs(cur.replying_ms || 0);
+        setTools(cur.tool_calls || []);
+        setStats(cur.stats || null);
+      }).catch(() => {});
+
+    const es = new EventSource(url, { withCredentials: false });
+    es.addEventListener('processing', (e) => {
+      const d = JSON.parse(e.data || '{}');
+      setStatus('processing');
+      setProcessingText(prev => [prev, d.message || 'processing...'].filter(Boolean).slice(-10).join('\\n'));
+    });
+    es.addEventListener('thinking', (e) => {
+      const d = JSON.parse(e.data || '{}');
+      setStatus('thinking');
+      setThinkingText(prev => prev + (d.chunk || ''));
+      setThinkingMs(Number(d.elapsed_ms || 0));
+    });
+    es.addEventListener('replying', (e) => {
+      const d = JSON.parse(e.data || '{}');
+      setStatus('replying');
+      setReplyText(prev => prev + (d.chunk || ''));
+      setReplyingMs(Number(d.elapsed_ms || 0));
+    });
+    es.addEventListener('tool_start', (e) => {
+      const d = JSON.parse(e.data || '{}');
+      setTools(prev => [...prev, { name: d.tool_name, status: 'running', success: null }].slice(-20));
+    });
+    es.addEventListener('tool_end', (e) => {
+      const d = JSON.parse(e.data || '{}');
+      setTools(prev => {
+        const items = [...prev];
+        const idx = items.map(x => x.name).lastIndexOf(d.tool_name);
+        if (idx >= 0) items[idx] = { ...items[idx], status: 'done', success: !!d.success, elapsed_ms: d.elapsed_ms };
+        return items;
+      });
+    });
+    es.addEventListener('done', (e) => {
+      const d = JSON.parse(e.data || '{}');
+      setStatus('done');
+      setStats({
+        input_tokens: d.input_tokens ?? null,
+        output_tokens: d.output_tokens ?? null,
+        thinking_ms: d.thinking_ms ?? null,
+        replying_ms: d.replying_ms ?? null,
+      });
+    });
+    es.onerror = () => {};
+
+    return () => { closed = true; es.close(); };
+  }, []);
+
+  return { status, processingText, thinkingText, replyText, thinkingMs, replyingMs, stats, tools };
+}
+
+function RealtimeTab() {
+  const rt = useRealtimeSSE();
+  const [history, setHistory] = useState([]);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const data = await apiFetch('/api/realtime/history?limit=12');
+      setHistory(data.items || []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { loadHistory(); const id = setInterval(loadHistory, 6000); return () => clearInterval(id); }, [loadHistory]);
+
+  return (
+    <div>
+      <div className="panel">
+        <div className="section-title" style={{marginTop:0}}>Current Process · {rt.status}</div>
+        <div className="text-muted">Processing</div>
+        <pre className="mono">{rt.processingText || 'Waiting for new turn...'}</pre>
+        <div className="text-muted" style={{marginTop:8}}>Thinking trace ({(rt.thinkingMs/1000).toFixed(1)}s)</div>
+        <pre className="mono">{rt.thinkingText || '—'}</pre>
+        <div className="text-muted" style={{marginTop:8}}>Reply output ({(rt.replyingMs/1000).toFixed(1)}s)</div>
+        <pre className="mono">{rt.replyText || '—'}</pre>
+        <div style={{marginTop:8}}>
+          {rt.tools.map((t, i) => (
+            <span key={`${t.name}-${i}`} className={`tool-pill ${t.status === 'running' ? 'run' : (t.success ? 'ok' : 'err')}`}>
+              {shortTool(t.name)} {t.status === 'running' ? '…' : (t.success ? '✓' : '✗')}
+            </span>
+          ))}
+        </div>
+        {rt.stats && <p className="text-muted" style={{marginTop:8}}>Tokens {rt.stats.input_tokens ?? '—'} / {rt.stats.output_tokens ?? '—'} · thinking {rt.stats.thinking_ms ?? 0}ms · replying {rt.stats.replying_ms ?? 0}ms</p>}
+      </div>
+
+      <div className="section-title">Recent History</div>
+      {history.length === 0 ? <div className="empty">No recent realtime turns yet.</div> : history.map((h, i) => (
+        <div key={h.turn_id || i} className="panel">
+          <div style={{display:'flex', justifyContent:'space-between'}}>
+            <strong>{fmtTime(h.completed_at || h.created_at)}</strong>
+            <span className="text-muted">{h.status}</span>
+          </div>
+          <p className="text-muted" style={{marginTop:6}}>{(h.user_text || '').slice(0, 140) || '(checkpoint turn)'}</p>
+          <pre className="mono" style={{maxHeight:90, overflowY:'auto'}}>{(h.reply_text || '').slice(0, 260) || 'No reply text captured'}</pre>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 // ---- Helpers ----
 function fmtTime(ts) {
@@ -594,6 +725,7 @@ function App() {
   if (!authed) return <AuthScreen onAuth={handleAuth} />;
 
   const tabs = [
+    { id: 'realtime', label: 'Realtime' },
     { id: 'overview', label: 'Overview' },
     { id: 'palace', label: 'Palace' },
     { id: 'kg', label: 'KG' },
@@ -612,6 +744,7 @@ function App() {
           <button key={t.id} className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
         ))}
       </div>
+      {tab === 'realtime' && <RealtimeTab />}
       {tab === 'overview' && <OverviewTab />}
       {tab === 'palace' && <PalaceTab />}
       {tab === 'kg' && <KGTab />}
