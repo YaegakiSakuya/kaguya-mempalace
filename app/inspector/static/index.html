@@ -7,6 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js" crossorigin></script>
 <style>
 :root {
@@ -565,39 +566,19 @@ function shortTool(name) {
 }
 
 function extractWings(taxonomy) {
-  // taxonomy could be a dict with wings, or text, or array
   if (Array.isArray(taxonomy)) return taxonomy;
-  if (taxonomy.wings) {
-    if (Array.isArray(taxonomy.wings)) {
-      return taxonomy.wings.map(w => {
-        if (typeof w === 'string') return { name: w, rooms: [] };
-        return { name: w.name || w.wing || String(w), rooms: w.rooms || [] };
-      });
-    }
-    if (typeof taxonomy.wings === 'object') {
-      return Object.entries(taxonomy.wings).map(([name, rooms]) => ({
-        name,
-        rooms: Array.isArray(rooms) ? rooms : Object.keys(rooms || {}),
-      }));
-    }
-  }
-  if (taxonomy.text) {
-    // Try to parse structured text
-    const lines = taxonomy.text.split('\n');
-    const wingsMap = {};
-    let curWing = null;
-    lines.forEach(l => {
-      l = l.trim();
-      if (l.startsWith('Wing:') || l.startsWith('wing_')) {
-        curWing = l.replace('Wing:', '').trim();
-        if (!wingsMap[curWing]) wingsMap[curWing] = [];
-      } else if (curWing && l.startsWith('- ')) {
-        wingsMap[curWing].push(l.slice(2).trim());
-      }
-    });
-    return Object.entries(wingsMap).map(([name, rooms]) => ({ name, rooms }));
-  }
-  return [];
+
+  const tree = taxonomy?.taxonomy || taxonomy?.wings || null;
+  if (!tree || typeof tree !== 'object') return [];
+
+  return Object.entries(tree).map(([name, rooms]) => ({
+    name,
+    rooms: Array.isArray(rooms)
+      ? rooms
+      : typeof rooms === 'object' && rooms !== null
+        ? Object.keys(rooms)
+        : [],
+  }));
 }
 
 // ---- Main App ----
