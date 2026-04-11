@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
 from telegram import Update
@@ -9,13 +11,33 @@ from telegram.constants import ChatAction
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 from app.core.config import Settings, load_settings
-from app.llm.client import generate_reply, run_memory_checkpoint
+from app.inspector.logger import append_jsonl, _now_iso
+from app.llm.client import ToolLoopResult, generate_reply, run_memory_checkpoint
 from app.memory.palace import mine_conversations, read_wakeup, refresh_wakeup
 from app.memory.state import increment_message_count, reset_message_count
 from app.memory.transcript import append_turn, load_recent_turns
 
 
 logger = logging.getLogger(__name__)
+
+
+def _write_turn_summary(logs_dir: Path, loop_result: ToolLoopResult, turn_type: str, chat_id: str) -> None:
+    """Write a turn summary JSONL record after a reply or checkpoint completes."""
+    ts = _now_iso()
+    turn_id = f"turn_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{chat_id}"
+    append_jsonl(logs_dir / "turn_summaries.jsonl", {
+        "ts": ts,
+        "turn_type": turn_type,
+        "chat_id": chat_id,
+        "turn_id": turn_id,
+        "total_prompt_tokens": loop_result.total_prompt_tokens,
+        "total_completion_tokens": loop_result.total_completion_tokens,
+        "total_rounds": loop_result.total_rounds,
+        "tools_called": loop_result.tools_called,
+        "tools_succeeded": loop_result.tools_succeeded,
+        "tools_failed": loop_result.tools_failed,
+        "palace_writes": loop_result.palace_writes,
+    })
 
 
 def configure_logging(logs_dir: Path) -> None:
@@ -73,12 +95,15 @@ async def run_autosave(application: Application, settings: Settings, chat_id: st
                     settings,
                     wakeup_text,
                     recent_turns,
+                    8,
+                    chat_id,
                 )
                 logger.info(
                     "autosave checkpoint finished for chat_id=%s result=%s",
                     chat_id,
-                    checkpoint_result,
+                    checkpoint_result.reply_text,
                 )
+                _write_turn_summary(settings.logs_dir, checkpoint_result, "checkpoint", chat_id)
 
             await asyncio.to_thread(mine_conversations, settings)
             await asyncio.to_thread(refresh_wakeup, settings)
@@ -132,7 +157,7 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         wakeup_text = await asyncio.to_thread(read_wakeup, settings)
 
-        assistant_text = await asyncio.to_thread(
+        loop_result = await asyncio.to_thread(
             generate_reply,
             settings,
             wakeup_text,
@@ -141,7 +166,9 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             user_text,
             6,
             force_status_bootstrap,
+            chat_id,
         )
+        assistant_text = loop_result.reply_text
 
         await update.message.reply_text(assistant_text)
 
@@ -152,6 +179,8 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             user_text,
             assistant_text,
         )
+
+        _write_turn_summary(settings.logs_dir, loop_result, "reply", chat_id)
 
         bootstrapped_chats.add(chat_id)
 
@@ -220,6 +249,30 @@ def build_application(settings: Settings) -> Application:
 def main() -> None:
     settings = load_settings()
     configure_logging(settings.logs_dir)
+
+    # Start Inspector API in background thread (only if token is configured)
+    if settings.inspector_token:
+        try:
+            import uvicorn
+            from app.inspector.api import create_inspector_app
+
+            inspector_app = create_inspector_app(settings)
+            inspector_thread = threading.Thread(
+                target=uvicorn.run,
+                kwargs={
+                    "app": inspector_app,
+                    "host": "0.0.0.0",
+                    "port": settings.inspector_port,
+                    "log_level": "warning",
+                },
+                daemon=True,
+            )
+            inspector_thread.start()
+            logger.info("inspector API started on port %s", settings.inspector_port)
+        except Exception:
+            logger.exception("failed to start inspector API")
+    else:
+        logger.info("inspector API disabled (INSPECTOR_TOKEN not set)")
 
     application = build_application(settings)
     application.run_polling(drop_pending_updates=False)
