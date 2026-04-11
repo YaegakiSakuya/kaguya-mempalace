@@ -227,6 +227,7 @@ def create_inspector_app(settings: Settings) -> FastAPI:
         wing: str = Query(default=""),
         room: str = Query(default=""),
         limit: int = Query(default=50, le=200),
+        offset: int = Query(default=0, ge=0),
     ):
         col = _get_collection(settings)
         if not col:
@@ -241,7 +242,11 @@ def create_inspector_app(settings: Settings) -> FastAPI:
             where = {"room": room}
 
         try:
-            kwargs: dict[str, Any] = {"include": ["metadatas", "documents"]}
+            kwargs: dict[str, Any] = {
+                "include": ["metadatas", "documents"],
+                "limit": limit,
+                "offset": offset,
+            }
             if where:
                 kwargs["where"] = where
             data = col.get(**kwargs)
@@ -253,7 +258,7 @@ def create_inspector_app(settings: Settings) -> FastAPI:
         metas = data.get("metadatas") or []
 
         results = []
-        for i in range(min(len(ids), limit)):
+        for i in range(len(ids)):
             content = (docs[i] or "") if i < len(docs) else ""
             results.append({
                 "id": ids[i],
