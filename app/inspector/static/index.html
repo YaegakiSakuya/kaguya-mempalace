@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kaguya Inspector</title>
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js" crossorigin></script>
+<style>
+:root {
+  --bg: #0f0f13;
+  --bg2: #1a1a24;
+  --bg3: #24243a;
+  --accent: #7c6fff;
+  --accent2: #ff6bca;
+  --text: #e0dfe6;
+  --text2: #8a89a0;
+  --success: #4ade80;
+  --fail: #f87171;
+  --border: #2e2e44;
+  --radius: 8px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+a { color:var(--accent); text-decoration:none; }
+
+/* Layout */
+.app { max-width:960px; margin:0 auto; padding:0 12px 24px; }
+.header { display:flex; align-items:center; justify-content:space-between; padding:16px 0; border-bottom:1px solid var(--border); margin-bottom:16px; }
+.header h1 { font-size:1.2rem; font-weight:700; }
+.header h1 span { color:var(--accent); }
+
+/* Tabs */
+.tabs { display:flex; gap:4px; overflow-x:auto; margin-bottom:16px; -webkit-overflow-scrolling:touch; }
+.tab { padding:8px 16px; border-radius:var(--radius); background:var(--bg2); color:var(--text2); border:none; cursor:pointer; font-size:.85rem; white-space:nowrap; transition:.15s; }
+.tab:hover { background:var(--bg3); }
+.tab.active { background:var(--accent); color:#fff; }
+
+/* Cards */
+.cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px,1fr)); gap:10px; margin-bottom:16px; }
+.card { background:var(--bg2); border-radius:var(--radius); padding:14px; border:1px solid var(--border); }
+.card .label { font-size:.7rem; text-transform:uppercase; color:var(--text2); margin-bottom:4px; letter-spacing:.05em; }
+.card .value { font-size:1.5rem; font-weight:700; color:var(--accent); }
+
+/* Table */
+.table-wrap { overflow-x:auto; margin-bottom:16px; }
+table { width:100%; border-collapse:collapse; font-size:.82rem; }
+th { text-align:left; padding:8px 10px; background:var(--bg2); color:var(--text2); font-weight:600; border-bottom:1px solid var(--border); }
+td { padding:8px 10px; border-bottom:1px solid var(--border); }
+tr:hover td { background:var(--bg2); }
+
+/* Misc */
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:.72rem; font-weight:600; }
+.badge.ok { background:rgba(74,222,128,.15); color:var(--success); }
+.badge.err { background:rgba(248,113,113,.15); color:var(--fail); }
+.section-title { font-size:.95rem; font-weight:600; margin:18px 0 10px; color:var(--text); }
+.text-muted { color:var(--text2); font-size:.82rem; }
+.empty { text-align:center; padding:40px 0; color:var(--text2); }
+
+/* Auth */
+.auth-box { max-width:360px; margin:80px auto; background:var(--bg2); padding:32px; border-radius:var(--radius); border:1px solid var(--border); text-align:center; }
+.auth-box h2 { margin-bottom:16px; font-size:1.1rem; }
+.auth-box input { width:100%; padding:10px; border-radius:var(--radius); border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:.9rem; margin-bottom:12px; }
+.auth-box button { padding:10px 24px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-size:.9rem; }
+
+/* Drill-down */
+.breadcrumb { font-size:.82rem; color:var(--text2); margin-bottom:12px; }
+.breadcrumb span { cursor:pointer; color:var(--accent); }
+.list-item { padding:10px 14px; background:var(--bg2); border-radius:var(--radius); margin-bottom:6px; cursor:pointer; border:1px solid var(--border); transition:.15s; }
+.list-item:hover { border-color:var(--accent); }
+.list-item .title { font-weight:600; font-size:.88rem; }
+.list-item .sub { font-size:.76rem; color:var(--text2); margin-top:2px; }
+
+/* Search bar */
+.search-bar { display:flex; gap:8px; margin-bottom:14px; }
+.search-bar input { flex:1; padding:8px 12px; border-radius:var(--radius); border:1px solid var(--border); background:var(--bg2); color:var(--text); font-size:.85rem; }
+.search-bar button { padding:8px 16px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-size:.85rem; }
+
+/* Chart wrapper */
+.chart-wrap { background:var(--bg2); border-radius:var(--radius); border:1px solid var(--border); padding:16px 10px; margin-bottom:16px; }
+
+/* Drawer detail */
+.drawer-detail { background:var(--bg2); border-radius:var(--radius); border:1px solid var(--border); padding:16px; margin-bottom:10px; }
+.drawer-detail pre { white-space:pre-wrap; word-break:break-word; font-size:.82rem; color:var(--text); }
+
+/* Responsive */
+@media (max-width:600px) {
+  .cards { grid-template-columns:repeat(2,1fr); }
+  .card .value { font-size:1.2rem; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+const { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+
+// ---- Auth ----
+function getToken() {
+  return localStorage.getItem('inspector_token') || '';
+}
+
+async function apiFetch(path) {
+  const token = getToken();
+  const res = await fetch(path, { headers: { 'Authorization': `Bearer ${token}` } });
+  if (res.status === 401) throw new Error('unauthorized');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ---- Components ----
+
+function Card({ label, value }) {
+  return (
+    <div className="card">
+      <div className="label">{label}</div>
+      <div className="value">{value ?? '-'}</div>
+    </div>
+  );
+}
+
+function AuthScreen({ onAuth }) {
+  const [val, setVal] = useState('');
+  return (
+    <div className="auth-box">
+      <h2>Kaguya Inspector</h2>
+      <p className="text-muted" style={{marginBottom:16}}>Enter your inspector token</p>
+      <input type="password" value={val} onChange={e => setVal(e.target.value)} placeholder="Token" onKeyDown={e => e.key === 'Enter' && onAuth(val)} />
+      <button onClick={() => onAuth(val)}>Enter</button>
+    </div>
+  );
+}
+
+// ---- Tab: Overview ----
+function OverviewTab() {
+  const [data, setData] = useState(null);
+  const [tools, setTools] = useState([]);
+  const [turns, setTurns] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const [ov, tc, tn] = await Promise.all([
+        apiFetch('/api/overview'),
+        apiFetch('/api/tools/calls?last_n=10'),
+        apiFetch('/api/turns?last_n=3'),
+      ]);
+      setData(ov);
+      setTools(tc);
+      setTurns(tn);
+    } catch {}
+  }, []);
+
+  useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+
+  if (!data) return <div className="empty">Loading...</div>;
+
+  return (
+    <div>
+      <div className="cards">
+        <Card label="Drawers" value={data.drawers} />
+        <Card label="Wings" value={data.wings} />
+        <Card label="Rooms" value={data.rooms} />
+        <Card label="KG Entities" value={data.kg_entities} />
+        <Card label="KG Triples" value={data.kg_triples} />
+      </div>
+
+      <div className="section-title">Recent Tool Calls</div>
+      {tools.length === 0 ? <p className="text-muted">No tool calls yet</p> : (
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Tool</th><th>Status</th><th>ms</th></tr></thead>
+            <tbody>
+              {tools.slice().reverse().map((t, i) => (
+                <tr key={i}>
+                  <td className="text-muted">{fmtTime(t.ts)}</td>
+                  <td>{shortTool(t.tool_name)}</td>
+                  <td><span className={`badge ${t.success ? 'ok' : 'err'}`}>{t.success ? 'OK' : 'FAIL'}</span></td>
+                  <td className="text-muted">{t.elapsed_ms}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="section-title">Recent Turns</div>
+      {turns.length === 0 ? <p className="text-muted">No turns yet</p> : (
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Type</th><th>Rounds</th><th>Tools</th><th>Tokens</th></tr></thead>
+            <tbody>
+              {turns.slice().reverse().map((t, i) => (
+                <tr key={i}>
+                  <td className="text-muted">{fmtTime(t.ts)}</td>
+                  <td><span className={`badge ${t.turn_type === 'reply' ? 'ok' : 'err'}`}>{t.turn_type}</span></td>
+                  <td>{t.total_rounds}</td>
+                  <td>{(t.tools_called || []).length}</td>
+                  <td className="text-muted">{(t.total_prompt_tokens||0)+(t.total_completion_tokens||0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {data.recent_diary && data.recent_diary.length > 0 && (
+        <>
+          <div className="section-title">Recent Diary</div>
+          {data.recent_diary.map((d, i) => (
+            <div key={i} className="list-item" style={{cursor:'default'}}>
+              <div className="title">{d.title || d.date || `Entry ${i+1}`}</div>
+              <div className="sub">{(d.content || d.text || JSON.stringify(d)).slice(0, 120)}</div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- Tab: Palace ----
+function PalaceTab() {
+  const [taxonomy, setTaxonomy] = useState(null);
+  const [path, setPath] = useState([]);  // [] = wings, [wing] = rooms, [wing, room] = drawers
+  const [drawers, setDrawers] = useState([]);
+  const [selectedDrawer, setSelectedDrawer] = useState(null);
+
+  useEffect(() => {
+    apiFetch('/api/taxonomy').then(setTaxonomy).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (path.length === 2) {
+      apiFetch(`/api/drawers?wing=${encodeURIComponent(path[0])}&room=${encodeURIComponent(path[1])}&limit=50`)
+        .then(setDrawers).catch(() => setDrawers([]));
+    }
+    setSelectedDrawer(null);
+  }, [path]);
+
+  const refresh = useCallback(async () => {
+    apiFetch('/api/taxonomy').then(setTaxonomy).catch(() => {});
+  }, []);
+
+  useEffect(() => { const id = setInterval(refresh, 30000); return () => clearInterval(id); }, [refresh]);
+
+  if (!taxonomy) return <div className="empty">Loading taxonomy...</div>;
+
+  // Parse taxonomy into wings/rooms
+  const wings = extractWings(taxonomy);
+
+  // Wing list
+  if (path.length === 0) {
+    return (
+      <div>
+        <div className="section-title">Wings ({wings.length})</div>
+        {wings.map(w => (
+          <div key={w.name} className="list-item" onClick={() => setPath([w.name])}>
+            <div className="title">{w.name}</div>
+            <div className="sub">{w.rooms.length} rooms</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Room list
+  if (path.length === 1) {
+    const wing = wings.find(w => w.name === path[0]);
+    const rooms = wing ? wing.rooms : [];
+    return (
+      <div>
+        <div className="breadcrumb"><span onClick={() => setPath([])}>Wings</span> / {path[0]}</div>
+        <div className="section-title">Rooms ({rooms.length})</div>
+        {rooms.map(r => (
+          <div key={r} className="list-item" onClick={() => setPath([path[0], r])}>
+            <div className="title">{r}</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Drawer list
+  return (
+    <div>
+      <div className="breadcrumb">
+        <span onClick={() => setPath([])}>Wings</span> / <span onClick={() => setPath([path[0]])}>{path[0]}</span> / {path[1]}
+      </div>
+      <div className="section-title">Drawers ({drawers.length})</div>
+      {drawers.map((d, i) => (
+        <div key={d.id || i}>
+          <div className="list-item" onClick={() => setSelectedDrawer(selectedDrawer === i ? null : i)}>
+            <div className="title">{d.id}</div>
+            <div className="sub">{d.content_preview}</div>
+          </div>
+          {selectedDrawer === i && (
+            <div className="drawer-detail">
+              <pre>{JSON.stringify(d.metadata, null, 2)}</pre>
+              <p style={{marginTop:10}} className="text-muted">Content preview: {d.content_preview}</p>
+            </div>
+          )}
+        </div>
+      ))}
+      {drawers.length === 0 && <p className="text-muted">No drawers found</p>}
+    </div>
+  );
+}
+
+// ---- Tab: KG ----
+function KGTab() {
+  const [stats, setStats] = useState(null);
+  const [entities, setEntities] = useState([]);
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState(null);
+  const [triples, setTriples] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const [s, e] = await Promise.all([
+        apiFetch('/api/kg/stats'),
+        apiFetch('/api/kg/entities?limit=100'),
+      ]);
+      setStats(s);
+      setEntities(e);
+    } catch {}
+  }, []);
+
+  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);
+
+  const expandEntity = async (name) => {
+    if (expanded === name) { setExpanded(null); return; }
+    setExpanded(name);
+    try {
+      const t = await apiFetch(`/api/kg/triples?entity=${encodeURIComponent(name)}&limit=50`);
+      setTriples(Array.isArray(t) ? t : t.triples || []);
+    } catch { setTriples([]); }
+  };
+
+  const filteredEntities = search
+    ? entities.filter(e => (e.name || '').toLowerCase().includes(search.toLowerCase()))
+    : entities;
+
+  return (
+    <div>
+      {stats && (
+        <div className="cards">
+          <Card label="Entities" value={stats.entities || stats.entity_count || '-'} />
+          <Card label="Triples" value={stats.triples || stats.triple_count || '-'} />
+          <Card label="Current" value={stats.current_triples ?? stats.current ?? '-'} />
+          <Card label="Expired" value={stats.expired_triples ?? stats.expired ?? '-'} />
+        </div>
+      )}
+
+      <div className="search-bar">
+        <input placeholder="Filter entities..." value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+
+      <div className="section-title">Entities ({filteredEntities.length})</div>
+      {filteredEntities.map((e, i) => (
+        <div key={e.name || i}>
+          <div className="list-item" onClick={() => expandEntity(e.name)}>
+            <div className="title">{e.name}</div>
+            <div className="sub">{e.type || ''} {e.properties ? `| ${JSON.stringify(e.properties).slice(0,80)}` : ''}</div>
+          </div>
+          {expanded === e.name && (
+            <div className="drawer-detail">
+              {triples.length === 0 ? <p className="text-muted">No triples</p> : (
+                <table>
+                  <thead><tr><th>Subject</th><th>Predicate</th><th>Object</th><th>Confidence</th></tr></thead>
+                  <tbody>
+                    {triples.map((t, j) => (
+                      <tr key={j}>
+                        <td>{t.subject}</td>
+                        <td style={{color:'var(--accent2)'}}>{t.predicate}</td>
+                        <td>{t.object}</td>
+                        <td className="text-muted">{t.confidence ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+      {filteredEntities.length === 0 && <p className="text-muted">No entities found</p>}
+    </div>
+  );
+}
+
+// ---- Tab: Usage ----
+function UsageTab() {
+  const [usage, setUsage] = useState([]);
+  const [turns, setTurns] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const [u, t] = await Promise.all([
+        apiFetch('/api/usage?last_n=200'),
+        apiFetch('/api/turns?last_n=50'),
+      ]);
+      setUsage(u);
+      setTurns(t);
+    } catch {}
+  }, []);
+
+  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);
+
+  // Aggregate by day
+  const daily = {};
+  usage.forEach(u => {
+    const day = (u.ts || '').slice(0, 10);
+    if (!day) return;
+    if (!daily[day]) daily[day] = { day, prompt: 0, completion: 0 };
+    daily[day].prompt += u.prompt_tokens || 0;
+    daily[day].completion += u.completion_tokens || 0;
+  });
+  const dailyData = Object.values(daily).sort((a, b) => a.day.localeCompare(b.day));
+
+  // Per-turn token bars
+  const turnData = turns.map(t => ({
+    id: fmtTime(t.ts),
+    prompt: t.total_prompt_tokens || 0,
+    completion: t.total_completion_tokens || 0,
+  }));
+
+  // Tool frequency
+  const toolFreq = {};
+  turns.forEach(t => (t.tools_called || []).forEach(name => {
+    toolFreq[name] = (toolFreq[name] || 0) + 1;
+  }));
+  const toolData = Object.entries(toolFreq).map(([name, count]) => ({ name: shortTool(name), count })).sort((a,b) => b.count - a.count);
+
+  return (
+    <div>
+      <div className="section-title">Daily Token Usage</div>
+      {dailyData.length === 0 ? <p className="text-muted">No data yet</p> : (
+        <div className="chart-wrap">
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={dailyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="day" tick={{fill:'var(--text2)', fontSize:11}} />
+              <YAxis tick={{fill:'var(--text2)', fontSize:11}} />
+              <Tooltip contentStyle={{background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text)'}} />
+              <Legend />
+              <Line type="monotone" dataKey="prompt" stroke="var(--accent)" name="Prompt" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="completion" stroke="var(--accent2)" name="Completion" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="section-title">Per-Turn Tokens</div>
+      {turnData.length === 0 ? <p className="text-muted">No data yet</p> : (
+        <div className="chart-wrap">
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={turnData.slice(-20)}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="id" tick={{fill:'var(--text2)', fontSize:9}} angle={-30} textAnchor="end" height={50} />
+              <YAxis tick={{fill:'var(--text2)', fontSize:11}} />
+              <Tooltip contentStyle={{background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text)'}} />
+              <Bar dataKey="prompt" stackId="a" fill="var(--accent)" name="Prompt" />
+              <Bar dataKey="completion" stackId="a" fill="var(--accent2)" name="Completion" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="section-title">Tool Call Frequency</div>
+      {toolData.length === 0 ? <p className="text-muted">No data yet</p> : (
+        <div className="chart-wrap">
+          <ResponsiveContainer width="100%" height={Math.max(150, toolData.length * 28)}>
+            <BarChart data={toolData} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis type="number" tick={{fill:'var(--text2)', fontSize:11}} />
+              <YAxis type="category" dataKey="name" tick={{fill:'var(--text2)', fontSize:11}} width={140} />
+              <Tooltip contentStyle={{background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text)'}} />
+              <Bar dataKey="count" fill="var(--accent)" name="Calls" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Tab: Trace ----
+function TraceTab() {
+  const [turns, setTurns] = useState([]);
+  const [tools, setTools] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const [tn, tc] = await Promise.all([
+        apiFetch('/api/turns?last_n=20'),
+        apiFetch('/api/tools/calls?last_n=100'),
+      ]);
+      setTurns(tn);
+      setTools(tc);
+    } catch {}
+  }, []);
+
+  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, [load]);
+
+  const reversed = turns.slice().reverse();
+
+  return (
+    <div>
+      <div className="section-title">Turn Trace ({reversed.length})</div>
+      {reversed.length === 0 ? <p className="text-muted">No turns yet</p> : reversed.map((t, i) => {
+        const pw = t.palace_writes || {};
+        const writes = [];
+        if (pw.drawer_write_calls) writes.push(`${pw.drawer_write_calls} drawer writes`);
+        if (pw.kg_write_calls) writes.push(`${pw.kg_write_calls} KG writes`);
+        if (pw.diary_write_calls) writes.push(`${pw.diary_write_calls} diary writes`);
+
+        // Find tool calls for this turn (rough match by timestamp proximity)
+        const turnTools = (t.tools_called || []);
+
+        return (
+          <div key={i} className="card" style={{marginBottom:10}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+              <span className={`badge ${t.turn_type === 'reply' ? 'ok' : 'err'}`}>{t.turn_type}</span>
+              <span className="text-muted">{fmtTime(t.ts)}</span>
+            </div>
+            <div style={{display:'flex', gap:16, flexWrap:'wrap', marginBottom:8}}>
+              <span className="text-muted">Rounds: <strong style={{color:'var(--text)'}}>{t.total_rounds}</strong></span>
+              <span className="text-muted">Tokens: <strong style={{color:'var(--text)'}}>{(t.total_prompt_tokens||0)+(t.total_completion_tokens||0)}</strong></span>
+              <span className="text-muted">Tools: <strong style={{color:t.tools_failed > 0 ? 'var(--fail)' : 'var(--success)'}}>{t.tools_succeeded}/{(t.tools_succeeded||0)+(t.tools_failed||0)}</strong></span>
+            </div>
+            {turnTools.length > 0 && (
+              <div style={{display:'flex', gap:4, flexWrap:'wrap', marginBottom:6}}>
+                {turnTools.map((tn, j) => (
+                  <span key={j} style={{background:'var(--bg3)', padding:'2px 8px', borderRadius:10, fontSize:'.72rem', color:'var(--text2)'}}>{shortTool(tn)}</span>
+                ))}
+              </div>
+            )}
+            {writes.length > 0 && (
+              <div style={{color:'var(--accent2)', fontSize:'.82rem', fontWeight:600}}>
+                Palace growth: {writes.join(', ')}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
+// ---- Helpers ----
+function fmtTime(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  } catch { return ts; }
+}
+
+function shortTool(name) {
+  return (name || '').replace('mempalace_', '');
+}
+
+function extractWings(taxonomy) {
+  // taxonomy could be a dict with wings, or text, or array
+  if (Array.isArray(taxonomy)) return taxonomy;
+  if (taxonomy.wings) {
+    if (Array.isArray(taxonomy.wings)) {
+      return taxonomy.wings.map(w => {
+        if (typeof w === 'string') return { name: w, rooms: [] };
+        return { name: w.name || w.wing || String(w), rooms: w.rooms || [] };
+      });
+    }
+    if (typeof taxonomy.wings === 'object') {
+      return Object.entries(taxonomy.wings).map(([name, rooms]) => ({
+        name,
+        rooms: Array.isArray(rooms) ? rooms : Object.keys(rooms || {}),
+      }));
+    }
+  }
+  if (taxonomy.text) {
+    // Try to parse structured text
+    const lines = taxonomy.text.split('\n');
+    const wingsMap = {};
+    let curWing = null;
+    lines.forEach(l => {
+      l = l.trim();
+      if (l.startsWith('Wing:') || l.startsWith('wing_')) {
+        curWing = l.replace('Wing:', '').trim();
+        if (!wingsMap[curWing]) wingsMap[curWing] = [];
+      } else if (curWing && l.startsWith('- ')) {
+        wingsMap[curWing].push(l.slice(2).trim());
+      }
+    });
+    return Object.entries(wingsMap).map(([name, rooms]) => ({ name, rooms }));
+  }
+  return [];
+}
+
+// ---- Main App ----
+function App() {
+  const [authed, setAuthed] = useState(!!getToken());
+  const [tab, setTab] = useState('overview');
+
+  const handleAuth = (token) => {
+    localStorage.setItem('inspector_token', token);
+    setAuthed(true);
+  };
+
+  if (!authed) return <AuthScreen onAuth={handleAuth} />;
+
+  const tabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'palace', label: 'Palace' },
+    { id: 'kg', label: 'KG' },
+    { id: 'usage', label: 'Usage' },
+    { id: 'trace', label: 'Trace' },
+  ];
+
+  return (
+    <div className="app">
+      <div className="header">
+        <h1><span>Kaguya</span> Inspector</h1>
+        <button className="tab" onClick={() => { localStorage.removeItem('inspector_token'); setAuthed(false); }}>Logout</button>
+      </div>
+      <div className="tabs">
+        {tabs.map(t => (
+          <button key={t.id} className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
+        ))}
+      </div>
+      {tab === 'overview' && <OverviewTab />}
+      {tab === 'palace' && <PalaceTab />}
+      {tab === 'kg' && <KGTab />}
+      {tab === 'usage' && <UsageTab />}
+      {tab === 'trace' && <TraceTab />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -31,6 +31,8 @@ class Settings:
     autosave_user_message_interval: int
     search_top_k: int
     recent_turns: int
+    inspector_port: int
+    inspector_token: str
 
 
 def load_settings() -> Settings:
@@ -52,6 +54,8 @@ def load_settings() -> Settings:
         autosave_user_message_interval=int(os.getenv("AUTOSAVE_USER_MESSAGE_INTERVAL", "15")),
         search_top_k=int(os.getenv("SEARCH_TOP_K", "8")),
         recent_turns=int(os.getenv("RECENT_TURNS", "8")),
+        inspector_port=int(os.getenv("INSPECTOR_PORT", "8765")),
+        inspector_token=os.getenv("INSPECTOR_TOKEN", "").strip(),
     )
 
     required = {
