@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
+import uuid
 from pathlib import Path
 
 from telegram import Update
@@ -9,13 +11,39 @@ from telegram.constants import ChatAction
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 from app.core.config import Settings, load_settings
-from app.llm.client import generate_reply, run_memory_checkpoint
+from app.inspector.api import create_inspector_app
+from app.inspector.logger import append_jsonl, utc_now_iso
+from app.llm.client import (
+    ToolLoopMetrics,
+    generate_reply_with_metrics,
+    run_memory_checkpoint_with_metrics,
+)
 from app.memory.palace import mine_conversations, read_wakeup, refresh_wakeup
 from app.memory.state import increment_message_count, reset_message_count
 from app.memory.transcript import append_turn, load_recent_turns
 
 
 logger = logging.getLogger(__name__)
+
+
+def _append_turn_summary(settings: Settings, turn_type: str, chat_id: str, metrics: ToolLoopMetrics) -> None:
+    append_jsonl(
+        settings.logs_dir / "turn_summaries.jsonl",
+        {
+            "ts": utc_now_iso(),
+            "turn_type": turn_type,
+            "chat_id": chat_id,
+            "turn_id": f"turn_{uuid.uuid4().hex}",
+            "total_prompt_tokens": metrics.prompt_tokens,
+            "total_completion_tokens": metrics.completion_tokens,
+            "total_tokens": metrics.total_tokens,
+            "total_rounds": metrics.total_rounds,
+            "tools_called": metrics.tools_called,
+            "tools_succeeded": metrics.tools_succeeded,
+            "tools_failed": metrics.tools_failed,
+            "palace_writes": metrics.palace_writes,
+        },
+    )
 
 
 def configure_logging(logs_dir: Path) -> None:
@@ -68,11 +96,20 @@ async def run_autosave(application: Application, settings: Settings, chat_id: st
             wakeup_text = await asyncio.to_thread(read_wakeup, settings)
 
             if recent_turns:
-                checkpoint_result = await asyncio.to_thread(
-                    run_memory_checkpoint,
+                checkpoint_result, checkpoint_metrics = await asyncio.to_thread(
+                    run_memory_checkpoint_with_metrics,
                     settings,
                     wakeup_text,
                     recent_turns,
+                    8,
+                    chat_id,
+                )
+                await asyncio.to_thread(
+                    _append_turn_summary,
+                    settings,
+                    "checkpoint",
+                    chat_id,
+                    checkpoint_metrics,
                 )
                 logger.info(
                     "autosave checkpoint finished for chat_id=%s result=%s",
@@ -132,8 +169,8 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         wakeup_text = await asyncio.to_thread(read_wakeup, settings)
 
-        assistant_text = await asyncio.to_thread(
-            generate_reply,
+        assistant_text, reply_metrics = await asyncio.to_thread(
+            generate_reply_with_metrics,
             settings,
             wakeup_text,
             "",
@@ -141,6 +178,7 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             user_text,
             6,
             force_status_bootstrap,
+            chat_id,
         )
 
         await update.message.reply_text(assistant_text)
@@ -151,6 +189,13 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             chat_id,
             user_text,
             assistant_text,
+        )
+        await asyncio.to_thread(
+            _append_turn_summary,
+            settings,
+            "reply",
+            chat_id,
+            reply_metrics,
         )
 
         bootstrapped_chats.add(chat_id)
@@ -220,6 +265,25 @@ def build_application(settings: Settings) -> Application:
 def main() -> None:
     settings = load_settings()
     configure_logging(settings.logs_dir)
+
+    if settings.inspector_token:
+        import uvicorn
+
+        inspector_app = create_inspector_app(settings)
+        inspector_thread = threading.Thread(
+            target=uvicorn.run,
+            kwargs={
+                "app": inspector_app,
+                "host": "0.0.0.0",
+                "port": settings.inspector_port,
+                "log_level": "warning",
+            },
+            daemon=True,
+        )
+        inspector_thread.start()
+        logger.info("inspector API started on port=%s", settings.inspector_port)
+    else:
+        logger.info("inspector API disabled (missing INSPECTOR_TOKEN)")
 
     application = build_application(settings)
     application.run_polling(drop_pending_updates=False)

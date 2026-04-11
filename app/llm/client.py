@@ -1,17 +1,76 @@
 from __future__ import annotations
 
+import json
 import logging
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 from openai import OpenAI
 
 from app.core.config import Settings
+from app.inspector.logger import append_jsonl, utc_now_iso
 from app.memory.tools import OPENAI_TOOLS, execute_tool
 
 Turn = Tuple[str, str]
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ToolLoopMetrics:
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    total_rounds: int = 0
+    tools_called: list[str] = field(default_factory=list)
+    tools_succeeded: int = 0
+    tools_failed: int = 0
+    palace_writes: dict[str, int] = field(
+        default_factory=lambda: {
+            "drawer_write_calls": 0,
+            "kg_write_calls": 0,
+            "diary_write_calls": 0,
+        }
+    )
+
+
+def _summarize_arguments(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+    key_sets = {
+        "mempalace_add_drawer": ["wing", "room", "title"],
+        "mempalace_search": ["query", "wing", "room"],
+        "mempalace_kg_add": ["subject", "predicate", "object"],
+        "mempalace_kg_query": ["entity", "direction"],
+        "mempalace_diary_write": ["date", "title", "tags"],
+        "mempalace_diary_read": ["date", "limit"],
+    }
+    wanted = key_sets.get(tool_name, ["wing", "room", "entity", "query"])
+    out: dict[str, Any] = {}
+    for key in wanted:
+        if key in args:
+            out[key] = args[key]
+    return out
+
+
+def _append_token_usage_log(settings: Settings, log_context: dict[str, str], round_index: int, response) -> None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    append_jsonl(
+        settings.logs_dir / "token_usage.jsonl",
+        {
+            "ts": utc_now_iso(),
+            "turn_type": log_context.get("turn_type", "unknown"),
+            "chat_id": log_context.get("chat_id", ""),
+            "round": round_index + 1,
+            "model": settings.openrouter_model,
+            "prompt_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+            "completion_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+            "total_tokens": int(getattr(usage, "total_tokens", 0) or 0),
+        },
+    )
+
 
 OPS_DIR = Path("/home/ubuntu/apps/kaguya-gateway/ops")
 CORE_IDENTITY_FILE = OPS_DIR / "prompts" / "core_identity.md"
@@ -277,8 +336,11 @@ def _run_tool_loop(
     settings: Settings,
     messages: list[dict],
     max_tool_rounds: int,
-) -> str:
+    log_context: dict[str, str] | None = None,
+) -> tuple[str, ToolLoopMetrics]:
     client = create_client(settings)
+    metrics = ToolLoopMetrics()
+    ctx = log_context or {}
 
     for round_index in range(max_tool_rounds):
         response = client.chat.completions.create(
@@ -292,6 +354,15 @@ def _run_tool_loop(
                 }
             },
         )
+
+        _append_token_usage_log(settings, ctx, round_index, response)
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            metrics.prompt_tokens += int(getattr(usage, "prompt_tokens", 0) or 0)
+            metrics.completion_tokens += int(getattr(usage, "completion_tokens", 0) or 0)
+            metrics.total_tokens += int(getattr(usage, "total_tokens", 0) or 0)
+
+        metrics.total_rounds = round_index + 1
 
         choice = response.choices[0]
         message = choice.message
@@ -310,14 +381,57 @@ def _run_tool_loop(
             )
 
             for tool_call in tool_calls:
-                tool_result = execute_tool(
-                    tool_name=tool_call.function.name,
-                    arguments=tool_call.function.arguments,
+                tool_name = tool_call.function.name
+                metrics.tools_called.append(tool_name)
+                started = time.monotonic()
+                parsed_args: dict[str, Any] = {}
+                tool_result = ""
+                err: str | None = None
+                success = False
+                try:
+                    parsed_args = json.loads(tool_call.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    parsed_args = {}
+
+                try:
+                    tool_result = execute_tool(
+                        tool_name=tool_name,
+                        arguments=tool_call.function.arguments,
+                    )
+                    success = True
+                    metrics.tools_succeeded += 1
+                    if tool_name == "mempalace_add_drawer":
+                        metrics.palace_writes["drawer_write_calls"] += 1
+                    elif tool_name == "mempalace_kg_add":
+                        metrics.palace_writes["kg_write_calls"] += 1
+                    elif tool_name == "mempalace_diary_write":
+                        metrics.palace_writes["diary_write_calls"] += 1
+                except Exception as exc:
+                    err = str(exc)
+                    metrics.tools_failed += 1
+                    tool_result = f"ERROR: {exc}"
+
+                elapsed_ms = int((time.monotonic() - started) * 1000)
+                append_jsonl(
+                    settings.logs_dir / "tool_calls.jsonl",
+                    {
+                        "ts": utc_now_iso(),
+                        "turn_type": ctx.get("turn_type", "unknown"),
+                        "chat_id": ctx.get("chat_id", ""),
+                        "round": round_index + 1,
+                        "tool_name": tool_name,
+                        "arguments_summary": _summarize_arguments(tool_name, parsed_args),
+                        "success": success,
+                        "result_chars": len(tool_result or ""),
+                        "elapsed_ms": elapsed_ms,
+                        "error": err,
+                    },
                 )
 
                 logger.info(
-                    "executed tool=%s result_chars=%s",
-                    tool_call.function.name,
+                    "executed tool=%s success=%s result_chars=%s",
+                    tool_name,
+                    success,
                     len(tool_result or ""),
                 )
 
@@ -335,9 +449,54 @@ def _run_tool_loop(
         if not reply:
             raise RuntimeError("LLM returned empty content")
 
-        return reply
+        return reply, metrics
 
     raise RuntimeError("LLM exceeded maximum MemPalace tool-calling rounds")
+
+
+def generate_reply_with_metrics(
+    settings: Settings,
+    wakeup_text: str,
+    _legacy_memory_text: str,
+    recent_turns: list[Turn],
+    user_text: str,
+    max_tool_rounds: int = 6,
+    force_status_bootstrap: bool = False,
+    chat_id: str = "",
+) -> tuple[str, ToolLoopMetrics]:
+    messages = build_reply_messages(
+        settings=settings,
+        wakeup_text=wakeup_text,
+        recent_turns=recent_turns,
+        user_text=user_text,
+        force_status_bootstrap=force_status_bootstrap,
+    )
+    return _run_tool_loop(
+        settings=settings,
+        messages=messages,
+        max_tool_rounds=max_tool_rounds,
+        log_context={"turn_type": "reply", "chat_id": chat_id},
+    )
+
+
+def run_memory_checkpoint_with_metrics(
+    settings: Settings,
+    wakeup_text: str,
+    recent_turns: list[Turn],
+    max_tool_rounds: int = 8,
+    chat_id: str = "",
+) -> tuple[str, ToolLoopMetrics]:
+    messages = build_checkpoint_messages(
+        settings=settings,
+        wakeup_text=wakeup_text,
+        recent_turns=recent_turns,
+    )
+    return _run_tool_loop(
+        settings=settings,
+        messages=messages,
+        max_tool_rounds=max_tool_rounds,
+        log_context={"turn_type": "checkpoint", "chat_id": chat_id},
+    )
 
 
 def generate_reply(
@@ -349,14 +508,17 @@ def generate_reply(
     max_tool_rounds: int = 6,
     force_status_bootstrap: bool = False,
 ) -> str:
-    messages = build_reply_messages(
+    reply, _metrics = generate_reply_with_metrics(
         settings=settings,
         wakeup_text=wakeup_text,
+        _legacy_memory_text=_legacy_memory_text,
         recent_turns=recent_turns,
         user_text=user_text,
+        max_tool_rounds=max_tool_rounds,
         force_status_bootstrap=force_status_bootstrap,
+        chat_id="",
     )
-    return _run_tool_loop(settings=settings, messages=messages, max_tool_rounds=max_tool_rounds)
+    return reply
 
 
 def run_memory_checkpoint(
@@ -365,9 +527,11 @@ def run_memory_checkpoint(
     recent_turns: list[Turn],
     max_tool_rounds: int = 8,
 ) -> str:
-    messages = build_checkpoint_messages(
+    reply, _metrics = run_memory_checkpoint_with_metrics(
         settings=settings,
         wakeup_text=wakeup_text,
         recent_turns=recent_turns,
+        max_tool_rounds=max_tool_rounds,
+        chat_id="",
     )
-    return _run_tool_loop(settings=settings, messages=messages, max_tool_rounds=max_tool_rounds)
+    return reply
