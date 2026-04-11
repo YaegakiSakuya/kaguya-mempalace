@@ -1,0 +1,60 @@
+:root {
+  /* === 奶油与纸张色彩系统 === */
+  --color-bg:             #FBFaF9;
+  --color-surface:        #FFFFFF;
+  --color-accent:         #D4704E;
+  --color-accent-hover:   #C86444;
+  --color-text:           #1e293b;
+  --color-text-secondary: #94a3b8;
+  --color-text-tertiary:  #cbd5e1;
+  --color-border:         #f1f0ee;
+  --color-danger:         #dc2626;
+  --color-success:        #16a34a;
+
+  /* === 圆角系统 === */
+  --radius-sm:    8px;
+  --radius-md:    16px;
+  --radius-lg:    22px;
+  --radius-xl:    28px;
+  --radius-sheet: 40px;
+
+  /* === 极度克制的悬浮阴影 === */
+  --shadow-card:   0 8px 24px -6px rgba(0,0,0,0.04);
+  --shadow-sheet:  0 -12px 40px -8px rgba(0,0,0,0.1);
+  --shadow-button: 0 2px 10px -2px rgba(0,0,0,0.05);
+
+  /* === 字体栈 === */
+  --font-serif: 'Songti SC', 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+  --font-sans:  -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  --font-mono:  'SF Mono', Menlo, Monaco, monospace;
+
+  /* === 间距 === */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+  --space-2xl: 48px;
+
+  /* === 动效 === */
+  --ease-spring:     cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-fast:   150ms;
+  --duration-normal: 300ms;
+  --duration-slow:   500ms;
+}
+
+/* === 心电图动画 === */
+@keyframes ecg-flow-7 {
+  0% { stroke-dashoffset: 160; opacity: 0; }
+  2% { stroke-dashoffset: 160; opacity: 0; }
+  4% { opacity: 1; stroke-dashoffset: 80; }
+  8% { stroke-dashoffset: 0; opacity: 1; }
+  12% { stroke-dashoffset: -80; opacity: 0.3; }
+  15% { stroke-dashoffset: -160; opacity: 0; }
+  100% { stroke-dashoffset: 160; opacity: 0; }
+}
+
+@keyframes offline-energy-flicker {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.55; }
+}
