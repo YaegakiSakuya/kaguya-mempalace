@@ -5,16 +5,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+import asyncio
 import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from app.core.config import Settings
 from app.inspector.logger import read_jsonl_tail
+from app.inspector.realtime import realtime_bus
 
 logger = logging.getLogger(__name__)
 
@@ -434,6 +436,42 @@ def create_inspector_app(settings: Settings) -> FastAPI:
     @app.get("/api/turns", dependencies=[Depends(auth)])
     async def turns(last_n: int = Query(default=20, le=200)):
         return read_jsonl_tail(settings.logs_dir / "turn_summaries.jsonl", last_n)
+
+    # ----- Realtime SSE + trace history -----
+
+    @app.get("/api/realtime/current", dependencies=[Depends(auth)])
+    async def realtime_current():
+        return realtime_bus.current()
+
+    @app.get("/api/realtime/history", dependencies=[Depends(auth)])
+    async def realtime_history(limit: int = Query(default=20, le=100)):
+        return {"items": realtime_bus.history(limit=limit)}
+
+    @app.get("/api/realtime/stream")
+    async def realtime_stream(request: Request, token: str = Query(default="")):
+        auth_header = request.headers.get("authorization", "")
+        header_ok = auth_header.startswith("Bearer ") and auth_header[7:] == settings.inspector_token
+        if not header_ok and token != settings.inspector_token:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        async def event_generator():
+            last_event_id = 0
+            while True:
+                events = realtime_bus.events_since(last_event_id)
+                if events:
+                    for event in events:
+                        last_event_id = max(last_event_id, int(event["id"]))
+                        payload = json.dumps(event["data"], ensure_ascii=False)
+                        yield f"id: {event['id']}\nevent: {event['event']}\ndata: {payload}\n\n"
+                else:
+                    yield ": heartbeat\n\n"
+                await asyncio.sleep(0.5)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        )
 
     return app
 

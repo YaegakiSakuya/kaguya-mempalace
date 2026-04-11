@@ -12,6 +12,7 @@ from telegram.ext import Application, ApplicationBuilder, CommandHandler, Contex
 
 from app.core.config import Settings, load_settings
 from app.inspector.logger import append_jsonl, _now_iso
+from app.inspector.realtime import realtime_bus
 from app.llm.client import ToolLoopResult, generate_reply, run_memory_checkpoint
 from app.memory.palace import mine_conversations, read_wakeup, refresh_wakeup
 from app.memory.state import increment_message_count, reset_message_count
@@ -80,6 +81,12 @@ async def run_autosave(application: Application, settings: Settings, chat_id: st
 
         try:
             logger.info("autosave started for chat_id=%s", chat_id)
+            turn_id = f"checkpoint_{uuid.uuid4().hex[:12]}"
+            realtime_bus.emit("processing", {
+                "turn_id": turn_id,
+                "chat_id": chat_id,
+                "message": "Autosave checkpoint started",
+            })
 
             recent_turns = await asyncio.to_thread(
                 load_recent_turns,
@@ -97,6 +104,7 @@ async def run_autosave(application: Application, settings: Settings, chat_id: st
                     recent_turns,
                     8,
                     chat_id,
+                    turn_id,
                 )
                 logger.info(
                     "autosave checkpoint finished for chat_id=%s result=%s",
@@ -104,6 +112,16 @@ async def run_autosave(application: Application, settings: Settings, chat_id: st
                     checkpoint_result.reply_text,
                 )
                 _write_turn_summary(settings.logs_dir, checkpoint_result, "checkpoint", chat_id)
+                realtime_bus.emit("done", {
+                    "turn_id": turn_id,
+                    "chat_id": chat_id,
+                    "input_tokens": checkpoint_result.total_prompt_tokens,
+                    "output_tokens": checkpoint_result.total_completion_tokens,
+                    "thinking_ms": checkpoint_result.thinking_ms,
+                    "replying_ms": checkpoint_result.replying_ms,
+                    "total_rounds": checkpoint_result.total_rounds,
+                    "tools_called": checkpoint_result.tools_called,
+                })
 
             await asyncio.to_thread(mine_conversations, settings)
             await asyncio.to_thread(refresh_wakeup, settings)
@@ -145,9 +163,21 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     force_status_bootstrap = chat_id not in bootstrapped_chats
+    turn_id = f"turn_{uuid.uuid4().hex[:12]}"
 
     try:
+        realtime_bus.emit("processing", {
+            "turn_id": turn_id,
+            "chat_id": chat_id,
+            "user_text": user_text,
+            "message": "Message received",
+        })
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+        realtime_bus.emit("processing", {
+            "turn_id": turn_id,
+            "chat_id": chat_id,
+            "message": "Preparing context and recent turns",
+        })
 
         recent_turns = await asyncio.to_thread(
             load_recent_turns,
@@ -156,6 +186,11 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             settings.recent_turns,
         )
         wakeup_text = await asyncio.to_thread(read_wakeup, settings)
+        realtime_bus.emit("processing", {
+            "turn_id": turn_id,
+            "chat_id": chat_id,
+            "message": "Wake-up context loaded; invoking runtime",
+        })
 
         loop_result = await asyncio.to_thread(
             generate_reply,
@@ -167,6 +202,7 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             6,
             force_status_bootstrap,
             chat_id,
+            turn_id,
         )
         assistant_text = loop_result.reply_text
 
@@ -181,6 +217,16 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
         _write_turn_summary(settings.logs_dir, loop_result, "reply", chat_id)
+        realtime_bus.emit("done", {
+            "turn_id": turn_id,
+            "chat_id": chat_id,
+            "input_tokens": loop_result.total_prompt_tokens,
+            "output_tokens": loop_result.total_completion_tokens,
+            "thinking_ms": loop_result.thinking_ms,
+            "replying_ms": loop_result.replying_ms,
+            "total_rounds": loop_result.total_rounds,
+            "tools_called": loop_result.tools_called,
+        })
 
         bootstrapped_chats.add(chat_id)
 
@@ -202,6 +248,11 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     except Exception:
         logger.exception("message handling failed for chat_id=%s", chat_id)
+        realtime_bus.emit("done", {
+            "turn_id": turn_id,
+            "chat_id": chat_id,
+            "error": "message handling failed",
+        })
         await update.message.reply_text("Something went wrong while handling your message.")
 
 
