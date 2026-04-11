@@ -637,7 +637,7 @@ def run_memory_checkpoint(
     settings: Settings,
     wakeup_text: str,
     recent_turns: list[Turn],
-    max_tool_rounds: int = 8,
+    max_tool_rounds: int = 12,
     chat_id: str = "",
     turn_id: str = "",
 ) -> ToolLoopResult:
