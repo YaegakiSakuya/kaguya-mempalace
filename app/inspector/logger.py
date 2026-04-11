@@ -52,19 +52,29 @@ def read_jsonl_tail(path: Path, last_n: int = 50) -> list[dict]:
 def _read_tail_large(path: Path, last_n: int) -> list[dict]:
     """Read the last N JSON lines from a large file without loading it all."""
     chunk_size = 8192
-    lines: list[str] = []
 
     with path.open("rb") as f:
         f.seek(0, os.SEEK_END)
-        remaining = f.tell()
+        file_size = f.tell()
+        remaining = file_size
         buffer = b""
 
-        while remaining > 0 and len(lines) < last_n + 1:
+        while remaining > 0:
             read_size = min(chunk_size, remaining)
             remaining -= read_size
             f.seek(remaining)
             buffer = f.read(read_size) + buffer
-            lines = buffer.split(b"\n")
+            # +2: one for a possible partial first line, one for the empty
+            # string before a leading newline
+            if buffer.count(b"\n") >= last_n + 2:
+                break
+
+        lines = buffer.split(b"\n")
+
+        # If we didn't read from the very start of the file, the first
+        # element is likely a partial line — drop it.
+        if remaining > 0:
+            lines = lines[1:]
 
     text_lines = [l.decode("utf-8", errors="replace").strip() for l in lines]
     text_lines = [l for l in text_lines if l]

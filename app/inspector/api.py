@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -18,22 +20,21 @@ logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Overview cache TTL in seconds
+OVERVIEW_TTL_SECONDS = 15
+
 
 # ---------------------------------------------------------------------------
 # Auth dependency
 # ---------------------------------------------------------------------------
 
 def _make_auth_dep(settings: Settings):
-    """Return a dependency that validates the bearer token or query param."""
+    """Return a dependency that validates the bearer token via header only."""
     expected = settings.inspector_token
 
     async def _verify_token(request: Request) -> None:
-        # Check Authorization header
         auth = request.headers.get("authorization", "")
         if auth.startswith("Bearer ") and auth[7:] == expected:
-            return
-        # Check query param
-        if request.query_params.get("token") == expected:
             return
         raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -41,14 +42,20 @@ def _make_auth_dep(settings: Settings):
 
 
 # ---------------------------------------------------------------------------
-# MemPalace helpers (lazy, per-request)
+# MemPalace helpers (cached)
 # ---------------------------------------------------------------------------
 
-def _get_collection(settings: Settings):
+@lru_cache(maxsize=1)
+def _get_chroma_client(palace_path: str):
+    """Return a cached ChromaDB PersistentClient."""
     import chromadb
 
-    os.environ["MEMPALACE_PALACE_PATH"] = str(settings.palace_path)
-    client = chromadb.PersistentClient(path=str(settings.palace_path))
+    os.environ["MEMPALACE_PALACE_PATH"] = palace_path
+    return chromadb.PersistentClient(path=palace_path)
+
+
+def _get_collection(settings: Settings):
+    client = _get_chroma_client(str(settings.palace_path))
     try:
         return client.get_collection("mempalace_drawers")
     except Exception:
@@ -72,10 +79,13 @@ def create_inspector_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="Kaguya Inspector", docs_url=None, redoc_url=None)
     auth = _make_auth_dep(settings)
 
+    # Overview cache
+    _overview_cache: dict[str, Any] = {"data": None, "ts": 0.0}
+
     # ----- Frontend -----
 
     @app.get("/")
-    async def serve_frontend(token: str = Query(default="")):
+    async def serve_frontend():
         html = STATIC_DIR / "index.html"
         if not html.exists():
             raise HTTPException(status_code=404, detail="Frontend not found")
@@ -85,68 +95,96 @@ def create_inspector_app(settings: Settings) -> FastAPI:
 
     @app.get("/api/overview", dependencies=[Depends(auth)])
     async def overview():
-        col = _get_collection(settings)
-        kg = _get_kg(settings)
+        now = time.monotonic()
+        if _overview_cache["data"] is not None and (now - _overview_cache["ts"]) < OVERVIEW_TTL_SECONDS:
+            return _overview_cache["data"]
 
+        # Use mempalace tool handlers to count wings/rooms instead of full-collection scan
         drawer_count = 0
-        wings: set[str] = set()
-        rooms: set[str] = set()
+        wing_count = 0
+        room_count = 0
 
+        try:
+            from mempalace.mcp_server import TOOLS
+
+            # Use list_wings to get wing count
+            wings_result = _parse_tool_result(TOOLS["mempalace_list_wings"]["handler"]())
+            wing_list = wings_result if isinstance(wings_result, list) else wings_result.get("wings", [])
+            wing_count = len(wing_list)
+
+            # Count rooms per wing and total drawers via taxonomy
+            taxonomy_result = _parse_tool_result(TOOLS["mempalace_get_taxonomy"]["handler"]())
+            if isinstance(taxonomy_result, dict):
+                for wing_data in (taxonomy_result.get("wings") or taxonomy_result.get("taxonomy") or {}).values() if isinstance(taxonomy_result.get("wings", taxonomy_result.get("taxonomy")), dict) else []:
+                    if isinstance(wing_data, dict):
+                        room_count += len(wing_data.get("rooms", []))
+                    elif isinstance(wing_data, list):
+                        room_count += len(wing_data)
+        except Exception:
+            # Fallback: use collection count for drawer total
+            pass
+
+        col = _get_collection(settings)
         if col:
             try:
-                all_meta = col.get(include=["metadatas"])
-                metas = all_meta.get("metadatas") or []
-                drawer_count = len(metas)
-                for m in metas:
-                    if m.get("wing"):
-                        wings.add(m["wing"])
-                    if m.get("room"):
-                        rooms.add(m["room"])
+                drawer_count = col.count()
             except Exception:
                 pass
 
-        kg_entity_count = 0
-        kg_triple_count = 0
-        if kg:
+        # Count rooms from taxonomy more robustly if the above didn't work
+        if room_count == 0 and wing_count > 0:
             try:
-                stats = kg.stats()
-                if isinstance(stats, dict):
-                    kg_entity_count = stats.get("entities", 0)
-                    kg_triple_count = stats.get("triples", 0)
-                elif isinstance(stats, str):
-                    s = json.loads(stats)
-                    kg_entity_count = s.get("entities", 0)
-                    kg_triple_count = s.get("triples", 0)
+                from mempalace.mcp_server import TOOLS
+                for wname in wing_list:
+                    w = wname if isinstance(wname, str) else (wname.get("name", "") if isinstance(wname, dict) else str(wname))
+                    if w:
+                        rooms_result = _parse_tool_result(TOOLS["mempalace_list_rooms"]["handler"](wing=w))
+                        rlist = rooms_result if isinstance(rooms_result, list) else rooms_result.get("rooms", [])
+                        room_count += len(rlist)
             except Exception:
                 pass
+
+        # KG stats
+        kg_entity_count = 0
+        kg_triple_count = 0
+        try:
+            from mempalace.mcp_server import TOOLS
+            kg_raw = TOOLS["mempalace_kg_stats"]["handler"]()
+            kg_stats = _parse_tool_result(kg_raw)
+            if isinstance(kg_stats, dict):
+                kg_entity_count = kg_stats.get("entities", kg_stats.get("entity_count", 0))
+                kg_triple_count = kg_stats.get("triples", kg_stats.get("triple_count", 0))
+        except Exception:
+            pass
 
         recent_tools = read_jsonl_tail(settings.logs_dir / "tool_calls.jsonl", 10)
         recent_turns = read_jsonl_tail(settings.logs_dir / "turn_summaries.jsonl", 5)
 
-        # Recent diary entries
+        # Recent diary entries — handle dict payload from mempalace_diary_read
         diary_entries: list[dict] = []
         try:
             from mempalace.mcp_server import TOOLS
             handler = TOOLS.get("mempalace_diary_read", {}).get("handler")
             if handler:
                 raw = handler(agent_name="kaguya", last_n=5)
-                if isinstance(raw, str):
-                    diary_entries = json.loads(raw) if raw.startswith("[") else [{"text": raw}]
-                elif isinstance(raw, list):
-                    diary_entries = raw
+                diary_entries = _parse_diary_result(raw)
         except Exception:
             pass
 
-        return {
+        result = {
             "drawers": drawer_count,
-            "wings": len(wings),
-            "rooms": len(rooms),
+            "wings": wing_count,
+            "rooms": room_count,
             "kg_entities": kg_entity_count,
             "kg_triples": kg_triple_count,
             "recent_tool_calls": recent_tools,
             "recent_turns": recent_turns,
             "recent_diary": diary_entries,
         }
+
+        _overview_cache["data"] = result
+        _overview_cache["ts"] = now
+        return result
 
     # ----- Taxonomy -----
 
@@ -409,3 +447,29 @@ def _parse_tool_result(result: Any) -> Any:
         except json.JSONDecodeError:
             return {"text": result}
     return {"value": str(result)}
+
+
+def _parse_diary_result(raw: Any) -> list[dict]:
+    """Parse mempalace_diary_read output into a list of diary entry dicts.
+
+    The handler may return a dict with an 'entries' key, a list, a JSON string,
+    or plain text.
+    """
+    if isinstance(raw, dict):
+        # e.g. {"entries": [...], "count": 5}
+        entries = raw.get("entries", raw.get("diary", []))
+        if isinstance(entries, list):
+            return entries
+        return [raw]
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+            return _parse_diary_result(parsed)
+        except json.JSONDecodeError:
+            return [{"text": raw}]
+    return []

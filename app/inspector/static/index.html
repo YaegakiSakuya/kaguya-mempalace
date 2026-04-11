@@ -100,12 +100,6 @@ const { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Le
 
 // ---- Auth ----
 function getToken() {
-  const params = new URLSearchParams(window.location.search);
-  const urlToken = params.get('token');
-  if (urlToken) {
-    localStorage.setItem('inspector_token', urlToken);
-    return urlToken;
-  }
   return localStorage.getItem('inspector_token') || '';
 }
 
@@ -519,9 +513,9 @@ function TraceTab() {
       {reversed.length === 0 ? <p className="text-muted">No turns yet</p> : reversed.map((t, i) => {
         const pw = t.palace_writes || {};
         const writes = [];
-        if (pw.drawers_added) writes.push(`+${pw.drawers_added} drawers`);
-        if (pw.kg_triples_added) writes.push(`+${pw.kg_triples_added} triples`);
-        if (pw.diary_entries) writes.push(`+${pw.diary_entries} diary`);
+        if (pw.drawer_write_calls) writes.push(`${pw.drawer_write_calls} drawer writes`);
+        if (pw.kg_write_calls) writes.push(`${pw.kg_write_calls} KG writes`);
+        if (pw.diary_write_calls) writes.push(`${pw.diary_write_calls} diary writes`);
 
         // Find tool calls for this turn (rough match by timestamp proximity)
         const turnTools = (t.tools_called || []);

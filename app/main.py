@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
-from datetime import datetime, timezone
+import uuid
 from pathlib import Path
 
 from telegram import Update
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 def _write_turn_summary(logs_dir: Path, loop_result: ToolLoopResult, turn_type: str, chat_id: str) -> None:
     """Write a turn summary JSONL record after a reply or checkpoint completes."""
     ts = _now_iso()
-    turn_id = f"turn_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{chat_id}"
+    turn_id = f"turn_{uuid.uuid4().hex[:12]}"
     append_jsonl(logs_dir / "turn_summaries.jsonl", {
         "ts": ts,
         "turn_type": turn_type,

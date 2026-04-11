@@ -17,11 +17,11 @@ Turn = Tuple[str, str]
 
 logger = logging.getLogger(__name__)
 
-# Tools that count as palace writes
+# Tools that count as palace write calls
 _PALACE_WRITE_TOOLS = {
-    "mempalace_add_drawer": "drawers_added",
-    "mempalace_kg_add": "kg_triples_added",
-    "mempalace_diary_write": "diary_entries",
+    "mempalace_add_drawer": "drawer_write_calls",
+    "mempalace_kg_add": "kg_write_calls",
+    "mempalace_diary_write": "diary_write_calls",
 }
 
 
@@ -35,9 +35,9 @@ class ToolLoopResult:
     tools_succeeded: int = 0
     tools_failed: int = 0
     palace_writes: dict[str, int] = field(default_factory=lambda: {
-        "drawers_added": 0,
-        "kg_triples_added": 0,
-        "diary_entries": 0,
+        "drawer_write_calls": 0,
+        "kg_write_calls": 0,
+        "diary_write_calls": 0,
     })
 
 OPS_DIR = Path("/home/ubuntu/apps/kaguya-gateway/ops")
