@@ -63,9 +63,9 @@ def _get_collection(settings: Settings):
 
 
 def _get_kg(settings: Settings):
-    from mempalace.knowledge_graph import KnowledgeGraph
+    from mempalace.knowledge_graph import KnowledgeGraph, DEFAULT_KG_PATH
 
-    db_path = settings.palace_path / "knowledge_graph.sqlite3"
+    db_path = Path(DEFAULT_KG_PATH)
     if not db_path.exists():
         return None
     return KnowledgeGraph(db_path=str(db_path))
@@ -329,7 +329,7 @@ def create_inspector_app(settings: Settings) -> FastAPI:
 
         try:
             import sqlite3
-            db_path = settings.palace_path / "knowledge_graph.sqlite3"
+            db_path = Path(_get_kg(settings).db_path)
             conn = sqlite3.connect(str(db_path))
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
