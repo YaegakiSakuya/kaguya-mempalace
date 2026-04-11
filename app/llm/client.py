@@ -5,7 +5,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 from openai import OpenAI
 
@@ -294,6 +294,104 @@ def _serialize_tool_calls(tool_calls) -> list[dict]:
     return serialized
 
 
+def _merge_tool_call_delta(acc: list[dict[str, Any]], delta_tool_calls: list[Any]) -> None:
+    for delta in delta_tool_calls:
+        index = getattr(delta, "index", 0) or 0
+        while len(acc) <= index:
+            acc.append(
+                {
+                    "id": "",
+                    "type": "function",
+                    "function": {"name": "", "arguments": ""},
+                }
+            )
+
+        target = acc[index]
+        delta_id = getattr(delta, "id", None)
+        if delta_id:
+            target["id"] = delta_id
+
+        delta_function = getattr(delta, "function", None)
+        if delta_function:
+            delta_name = getattr(delta_function, "name", None)
+            if delta_name:
+                target["function"]["name"] += delta_name
+
+            delta_args = getattr(delta_function, "arguments", None)
+            if delta_args:
+                target["function"]["arguments"] += delta_args
+
+
+def _normalize_tool_calls(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for idx, item in enumerate(tool_calls):
+        fn = item.get("function", {}) if isinstance(item, dict) else {}
+        normalized.append(
+            {
+                "id": item.get("id") or f"stream_tool_call_{idx}",
+                "type": "function",
+                "function": {
+                    "name": fn.get("name", ""),
+                    "arguments": fn.get("arguments", "") or "{}",
+                },
+            }
+        )
+    return normalized
+
+
+def _stream_chat_completion_round(
+    client: OpenAI,
+    settings: Settings,
+    messages: list[dict],
+    *,
+    on_reply_chunk=None,
+) -> tuple[str, list[dict[str, Any]], Any]:
+    """Return streamed assistant text, tool calls, and usage object for one LLM round."""
+
+    response_stream = client.chat.completions.create(
+        model=settings.openrouter_model,
+        messages=messages,
+        tools=OPENAI_TOOLS,
+        tool_choice="auto",
+        stream=True,
+        stream_options={"include_usage": True},
+        extra_body={
+            "provider": {
+                "require_parameters": True
+            }
+        },
+    )
+
+    reply_chunks: list[str] = []
+    streamed_tool_calls: list[dict[str, Any]] = []
+    usage = None
+
+    for chunk in response_stream:
+        if getattr(chunk, "usage", None):
+            usage = chunk.usage
+
+        for choice in (getattr(chunk, "choices", None) or []):
+            delta = getattr(choice, "delta", None)
+            if not delta:
+                continue
+
+            content_piece = getattr(delta, "content", None)
+            if isinstance(content_piece, str) and content_piece:
+                reply_chunks.append(content_piece)
+                if on_reply_chunk is not None:
+                    on_reply_chunk(content_piece)
+
+            delta_tool_calls = getattr(delta, "tool_calls", None) or []
+            if delta_tool_calls:
+                _merge_tool_call_delta(streamed_tool_calls, delta_tool_calls)
+
+    tool_calls = [
+        item for item in streamed_tool_calls
+        if item.get("function", {}).get("name")
+    ]
+    return "".join(reply_chunks).strip(), _normalize_tool_calls(tool_calls), usage
+
+
 def create_client(settings: Settings) -> OpenAI:
     return OpenAI(
         api_key=settings.openrouter_api_key,
@@ -326,20 +424,50 @@ def _run_tool_loop(
                 "chat_id": chat_id,
                 "message": f"LLM round {round_index + 1}: planning",
             })
-        response = client.chat.completions.create(
-            model=settings.openrouter_model,
-            messages=messages,
-            tools=OPENAI_TOOLS,
-            tool_choice="auto",
-            extra_body={
-                "provider": {
-                    "require_parameters": True
-                }
-            },
-        )
+        streamed_error = None
+        streamed_reply = ""
+        streamed_tool_calls: list[dict[str, Any]] = []
+        usage = None
+        try:
+            streamed_reply, streamed_tool_calls, usage = _stream_chat_completion_round(
+                client=client,
+                settings=settings,
+                messages=messages,
+                on_reply_chunk=(
+                    (lambda chunk: realtime_bus.emit("replying", {
+                        "turn_id": turn_id,
+                        "chat_id": chat_id,
+                        "chunk": chunk,
+                        "elapsed_ms": int((time.monotonic() - t0_thinking) * 1000),
+                    }))
+                    if turn_id else None
+                ),
+            )
+        except Exception as exc:
+            streamed_error = exc
+            logger.warning("streaming round failed; falling back to non-streaming: %s", exc)
+
+        if streamed_error is not None:
+            response = client.chat.completions.create(
+                model=settings.openrouter_model,
+                messages=messages,
+                tools=OPENAI_TOOLS,
+                tool_choice="auto",
+                extra_body={
+                    "provider": {
+                        "require_parameters": True
+                    }
+                },
+            )
+            usage = getattr(response, "usage", None)
+            choice = response.choices[0]
+            message = choice.message
+            tool_calls = _serialize_tool_calls(getattr(message, "tool_calls", None) or [])
+            streamed_reply = _extract_text(response)
+        else:
+            tool_calls = streamed_tool_calls
 
         # --- Token usage logging ---
-        usage = getattr(response, "usage", None)
         if usage:
             prompt_tok = getattr(usage, "prompt_tokens", 0) or 0
             completion_tok = getattr(usage, "completion_tokens", 0) or 0
@@ -356,13 +484,9 @@ def _run_tool_loop(
                 "chat_id": chat_id,
             })
 
-        choice = response.choices[0]
-        message = choice.message
-        tool_calls = getattr(message, "tool_calls", None) or []
-
         if tool_calls:
             result.total_rounds = round_index + 1
-            tool_names = [tool_call.function.name for tool_call in tool_calls]
+            tool_names = [tool_call.get("function", {}).get("name", "unknown") for tool_call in tool_calls]
             logger.info("llm tool round=%s tool_calls=%s", round_index + 1, tool_names)
             if turn_id:
                 realtime_bus.emit("thinking", {
@@ -375,14 +499,14 @@ def _run_tool_loop(
             messages.append(
                 {
                     "role": "assistant",
-                    "content": message.content or "",
-                    "tool_calls": _serialize_tool_calls(tool_calls),
+                    "content": streamed_reply,
+                    "tool_calls": tool_calls,
                 }
             )
 
             for tool_call in tool_calls:
-                tool_name = tool_call.function.name
-                raw_args = tool_call.function.arguments
+                tool_name = tool_call.get("function", {}).get("name", "")
+                raw_args = tool_call.get("function", {}).get("arguments", "{}")
                 try:
                     args_dict = json.loads(raw_args) if raw_args else {}
                 except json.JSONDecodeError:
@@ -453,7 +577,7 @@ def _run_tool_loop(
                 messages.append(
                     {
                         "role": "tool",
-                        "tool_call_id": tool_call.id,
+                        "tool_call_id": tool_call.get("id", ""),
                         "content": tool_result or "",
                     }
                 )
@@ -461,19 +585,19 @@ def _run_tool_loop(
             continue
 
         result.total_rounds = round_index + 1
-        reply = _extract_text(response)
+        reply = streamed_reply
         if not reply:
             raise RuntimeError("LLM returned empty content")
 
         result.thinking_ms = int((time.monotonic() - t0_thinking) * 1000)
         t0_reply = time.monotonic()
         if turn_id:
-            chunk_size = 120
-            for idx in range(0, len(reply), chunk_size):
+            # Fallback path only has post-hoc content; emit once for inspector compatibility.
+            if streamed_error is not None:
                 realtime_bus.emit("replying", {
                     "turn_id": turn_id,
                     "chat_id": chat_id,
-                    "chunk": reply[idx: idx + chunk_size],
+                    "chunk": reply,
                     "elapsed_ms": int((time.monotonic() - t0_reply) * 1000),
                 })
         result.replying_ms = int((time.monotonic() - t0_reply) * 1000)
