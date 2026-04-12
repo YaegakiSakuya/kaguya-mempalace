@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import useTelegram from '../hooks/useTelegram'
-import useSSE from '../hooks/useSSE'
 import useApi from '../hooks/useApi'
 import LiveProcess from '../components/stream/LiveProcess'
 import HistoryList from '../components/stream/HistoryList'
 
-export default function StreamPage() {
+export default function StreamPage({ sse }) {
   const { initData } = useTelegram()
   const { get, loading } = useApi(initData)
   const [history, setHistory] = useState([])
@@ -15,7 +14,13 @@ export default function StreamPage() {
     if (data?.items) setHistory(data.items)
   }, [get])
 
-  const { status, events, stats, connected } = useSSE(initData, fetchHistory)
+  // Refresh history when SSE receives a done event
+  const { status, events, stats, connected } = sse
+  useEffect(() => {
+    if (status === 'done') {
+      fetchHistory()
+    }
+  }, [status, fetchHistory])
 
   useEffect(() => {
     fetchHistory()
