@@ -32,20 +32,37 @@ class RealtimeEventBus:
             self._apply_event(event_type, payload, event["ts"])
             return event
 
-    def events_since(self, last_event_id: int) -> list[dict[str, Any]]:
+    def events_since(self, last_event_id: int, chat_id: str = "") -> list[dict[str, Any]]:
         with self._lock:
-            return [deepcopy(e) for e in self._events if e["id"] > last_event_id]
+            items = [e for e in self._events if e["id"] > last_event_id]
+            if chat_id:
+                items = [e for e in items if str((e.get("data") or {}).get("chat_id") or "") == chat_id]
+            return [deepcopy(e) for e in items]
 
-    def current(self) -> dict[str, Any]:
+    def current(self, chat_id: str = "") -> dict[str, Any]:
         with self._lock:
+            if chat_id:
+                for item in reversed(self._history):
+                    if str(item.get("chat_id") or "") == chat_id:
+                        return deepcopy(item)
+
+                for turn_id in reversed(list(self._turn_state.keys())):
+                    state = self._turn_state.get(turn_id) or {}
+                    if str(state.get("chat_id") or "") == chat_id:
+                        return deepcopy(state)
+                return {}
+
             if not self._latest_turn_id:
                 return {}
             state = self._turn_state.get(self._latest_turn_id) or {}
             return deepcopy(state)
 
-    def history(self, limit: int = 20) -> list[dict[str, Any]]:
+    def history(self, limit: int = 20, chat_id: str = "") -> list[dict[str, Any]]:
         with self._lock:
-            items = list(self._history)[-limit:]
+            items = list(self._history)
+            if chat_id:
+                items = [item for item in items if str(item.get("chat_id") or "") == chat_id]
+            items = items[-limit:]
             return deepcopy(items[::-1])
 
     def _apply_event(self, event_type: str, payload: dict[str, Any], ts: str) -> None:

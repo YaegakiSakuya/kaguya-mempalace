@@ -33,6 +33,10 @@ class Settings:
     recent_turns: int
     inspector_port: int
     inspector_token: str
+    miniapp_session_secret: str
+    miniapp_session_ttl_seconds: int
+    miniapp_initdata_max_age_seconds: int
+    miniapp_url: str
 
 
 def load_settings() -> Settings:
@@ -56,6 +60,10 @@ def load_settings() -> Settings:
         recent_turns=int(os.getenv("RECENT_TURNS", "8")),
         inspector_port=int(os.getenv("INSPECTOR_PORT", "8765")),
         inspector_token=os.getenv("INSPECTOR_TOKEN", "").strip(),
+        miniapp_session_secret=os.getenv("MINIAPP_SESSION_SECRET", "").strip() or os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
+        miniapp_session_ttl_seconds=int(os.getenv("MINIAPP_SESSION_TTL_SECONDS", "900")),
+        miniapp_initdata_max_age_seconds=int(os.getenv("MINIAPP_INITDATA_MAX_AGE_SECONDS", "300")),
+        miniapp_url=os.getenv("MINIAPP_URL", "").strip(),
     )
 
     required = {

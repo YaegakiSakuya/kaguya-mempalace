@@ -6,7 +6,7 @@ import threading
 import uuid
 from pathlib import Path
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ChatAction
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -141,6 +141,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     chat_id = str(update.effective_chat.id)
     if not is_allowed_chat(settings, chat_id):
         await update.message.reply_text("This chat is not allowed.")
+        return
+
+    if settings.miniapp_url:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Open Mini App", web_app=WebAppInfo(url=settings.miniapp_url))]
+        ])
+        await update.message.reply_text("Gateway is online.", reply_markup=keyboard)
         return
 
     await update.message.reply_text("Gateway is online.")
@@ -301,8 +308,8 @@ def main() -> None:
     settings = load_settings()
     configure_logging(settings.logs_dir)
 
-    # Start Inspector API in background thread (only if token is configured)
-    if settings.inspector_token:
+    # Start API server in background thread (Inspector + Mini App routes)
+    if settings.inspector_token or settings.miniapp_url:
         try:
             import uvicorn
             from app.inspector.api import create_inspector_app
@@ -319,11 +326,11 @@ def main() -> None:
                 daemon=True,
             )
             inspector_thread.start()
-            logger.info("inspector API started on port %s", settings.inspector_port)
+            logger.info("api server started on port %s", settings.inspector_port)
         except Exception:
-            logger.exception("failed to start inspector API")
+            logger.exception("failed to start API server")
     else:
-        logger.info("inspector API disabled (INSPECTOR_TOKEN not set)")
+        logger.info("api server disabled (set INSPECTOR_TOKEN and/or MINIAPP_URL)")
 
     application = build_application(settings)
     application.run_polling(drop_pending_updates=False)

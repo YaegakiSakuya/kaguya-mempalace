@@ -1,0 +1,14 @@
+:root {
+  --color-bg: #FBFaF9;
+  --color-surface: #FFFFFF;
+  --color-accent: #D4704E;
+  --color-text: #1e293b;
+  --color-text-secondary: #94a3b8;
+  --color-border: #f1f0ee;
+  --color-success: #16a34a;
+  --radius-card: 22px;
+  --radius-sheet: 40px;
+  --shadow-card: 0 8px 24px -6px rgba(0, 0, 0, 0.04);
+  --shadow-sheet: 0 -12px 40px -8px rgba(0, 0, 0, 0.1);
+}
+@keyframes pulse { 0%,100%{opacity:.3;} 50%{opacity:1;} }

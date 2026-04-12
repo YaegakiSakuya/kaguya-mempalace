@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kaguya Mini App</title>
+  <link rel="stylesheet" href="/miniapp/tokens.css" />
+  <style>
+    *{box-sizing:border-box} body{margin:0;background:var(--color-bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--color-text)}
+    .page{max-width:780px;margin:0 auto;min-height:100vh;padding:env(safe-area-inset-top,8px) 16px env(safe-area-inset-bottom,24px)}
+    .top{display:flex;justify-content:space-between;align-items:center;padding:12px 0 18px}
+    .btn{border:none;border-radius:999px;background:var(--color-surface);box-shadow:var(--shadow-card);padding:10px 12px;cursor:pointer}
+    .line{font-size:13px;color:var(--color-text-secondary)}
+    .card{border:1px solid #fff;background:var(--color-surface);border-radius:var(--radius-card);padding:14px;box-shadow:var(--shadow-card);margin-bottom:12px}
+    .tag{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--color-text-secondary)}
+    pre{white-space:pre-wrap;word-break:break-word;margin:8px 0 0;font-size:13px;line-height:1.55}
+    .history-item{border-radius:20px;background:var(--color-surface);padding:12px 14px;margin:8px 0;border:1px solid #fff;box-shadow:var(--shadow-card)}
+    .sheet-wrap{position:fixed;inset:0;display:none;justify-content:flex-end;z-index:20}
+    .sheet-wrap.open{display:flex}
+    .sheet-backdrop{position:absolute;inset:0;background:rgba(30,41,59,.08)}
+    .sheet{position:relative;max-width:780px;width:100%;margin:0 auto;background:var(--color-surface);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;padding:18px;box-shadow:var(--shadow-sheet)}
+    .dot{display:inline-block;width:7px;height:7px;border-radius:999px;background:var(--color-accent);animation:pulse 1.2s infinite}
+  </style>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div class="page">
+    <div class="top">
+      <button class="btn" id="menuBtn">☰</button>
+      <div class="line" id="statusLine">Connecting…</div>
+      <button class="btn" id="refreshBtn">↻</button>
+    </div>
+
+    <div class="card" id="currentCard"><div class="tag">Current process</div><pre id="currentText">Waiting for events…</pre></div>
+    <div id="history"></div>
+  </div>
+
+  <div class="sheet-wrap" id="sheetWrap">
+    <div class="sheet-backdrop" id="sheetBackdrop"></div>
+    <div class="sheet">
+      <div class="tag">Menu</div>
+      <p id="identity" class="line">No identity</p>
+      <p class="line">This Mini App shows only your own chat runtime history.</p>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const tg = window.Telegram?.WebApp;
+  tg?.ready();
+  tg?.expand();
+
+  let token = '';
+  let es = null;
+
+  const statusLine = document.getElementById('statusLine');
+  const currentText = document.getElementById('currentText');
+  const historyEl = document.getElementById('history');
+  const identityEl = document.getElementById('identity');
+
+  function setStatus(s) { statusLine.textContent = s; }
+
+  async function auth() {
+    const initData = tg?.initData || '';
+    if (!initData) {
+      setStatus('No Telegram initData (open via Telegram)');
+      return false;
+    }
+    const res = await fetch('/api/miniapp/auth', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ init_data: initData })
+    });
+    if (!res.ok) {
+      setStatus('Auth failed');
+      return false;
+    }
+    const data = await res.json();
+    token = data.token;
+    identityEl.textContent = `User: ${data.user?.first_name || ''} (#${data.chat_id})`;
+    return true;
+  }
+
+  function renderCurrent(item) {
+    if (!item || !item.turn_id) {
+      currentText.textContent = 'Idle';
+      return;
+    }
+    const stats = item.stats || {};
+    const msg = (item.processing_messages || []).slice(-1)[0] || '';
+    currentText.textContent = [
+      `status: ${item.status}`,
+      msg ? `processing: ${msg}` : '',
+      item.thinking_text ? `\n[thinking]\n${item.thinking_text}` : '',
+      item.reply_text ? `\n[reply]\n${item.reply_text}` : '',
+      stats.input_tokens != null ? `\nTOKENS ${stats.input_tokens}/${stats.output_tokens}` : ''
+    ].filter(Boolean).join('\n');
+  }
+
+  function renderHistory(items) {
+    historyEl.innerHTML = '';
+    if (!items.length) {
+      historyEl.innerHTML = '<div class="card"><div class="tag">History</div><pre>No history yet.</pre></div>';
+      return;
+    }
+    items.forEach((it) => {
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      const t = new Date(it.completed_at || it.created_at || Date.now()).toLocaleString();
+      const stats = it.stats || {};
+      div.innerHTML = `<div class="tag">${t}</div><pre>${(it.reply_text || 'No reply').slice(0, 700)}\n\nTOKENS ${stats.input_tokens ?? '—'}/${stats.output_tokens ?? '—'}</pre>`;
+      historyEl.appendChild(div);
+    });
+  }
+
+  async function loadCurrentHistory() {
+    const headers = { Authorization: `Bearer ${token}` };
+    const [currentRes, historyRes] = await Promise.all([
+      fetch('/api/miniapp/current', { headers }),
+      fetch('/api/miniapp/history?limit=20', { headers })
+    ]);
+    if (currentRes.ok) renderCurrent(await currentRes.json());
+    if (historyRes.ok) {
+      const h = await historyRes.json();
+      renderHistory(h.items || []);
+    }
+  }
+
+  function connectStream() {
+    if (es) es.close();
+    es = new EventSource(`/api/miniapp/stream?token=${encodeURIComponent(token)}`);
+    setStatus('Live <span class="dot"></span>');
+    es.addEventListener('processing', (e) => {
+      const d = JSON.parse(e.data || '{}');
+      renderCurrent({status:'processing',processing_messages:[d.message || 'Processing']});
+    });
+    es.addEventListener('thinking', (e) => {
+      const d = JSON.parse(e.data || '{}');
+      renderCurrent({status:'thinking',thinking_text:d.chunk || ''});
+    });
+    es.addEventListener('replying', (e) => {
+      const d = JSON.parse(e.data || '{}');
+      renderCurrent({status:'replying',reply_text:d.chunk || ''});
+    });
+    es.addEventListener('done', async () => {
+      await loadCurrentHistory();
+    });
+    es.onerror = () => setStatus('Reconnecting stream…');
+  }
+
+  document.getElementById('refreshBtn').onclick = () => loadCurrentHistory();
+  document.getElementById('menuBtn').onclick = () => document.getElementById('sheetWrap').classList.add('open');
+  document.getElementById('sheetBackdrop').onclick = () => document.getElementById('sheetWrap').classList.remove('open');
+
+  (async () => {
+    const ok = await auth();
+    if (!ok) return;
+    await loadCurrentHistory();
+    connectStream();
+  })();
+})();
+</script>
+</body>
+</html>

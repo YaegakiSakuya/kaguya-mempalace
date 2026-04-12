@@ -14,6 +14,8 @@ from typing import Any
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from app.miniapp.api import create_miniapp_router, miniapp_frontend_response
+
 from app.core.config import Settings
 from app.inspector.logger import read_jsonl_tail
 from app.inspector.realtime import realtime_bus
@@ -35,6 +37,8 @@ def _make_auth_dep(settings: Settings):
     expected = settings.inspector_token
 
     async def _verify_token(request: Request) -> None:
+        if not expected:
+            raise HTTPException(status_code=401, detail="Inspector auth is disabled")
         auth = request.headers.get("authorization", "")
         if auth.startswith("Bearer ") and auth[7:] == expected:
             return
@@ -80,6 +84,18 @@ def _get_kg(settings: Settings):
 def create_inspector_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="Kaguya Inspector", docs_url=None, redoc_url=None)
     auth = _make_auth_dep(settings)
+    app.include_router(create_miniapp_router(settings))
+
+    @app.get("/miniapp")
+    async def serve_miniapp():
+        return miniapp_frontend_response()
+
+    @app.get("/miniapp/tokens.css")
+    async def serve_miniapp_tokens():
+        css = Path(__file__).parent.parent / "miniapp" / "static" / "tokens.css"
+        if not css.exists():
+            raise HTTPException(status_code=404, detail="Mini App stylesheet not found")
+        return FileResponse(str(css), media_type="text/css")
 
     # Overview cache
     _overview_cache: dict[str, Any] = {"data": None, "ts": 0.0}
