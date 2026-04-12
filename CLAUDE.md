@@ -2,97 +2,114 @@
 
 ## Project Overview
 
-辉夜记忆宫殿（Kaguya MemPalace）：一个 Telegram Bot + MemPalace 记忆系统 + Inspector 监控面板的单用户 AI 伴侣系统。部署在 Ubuntu 24 VPS 上。
+辉夜记忆宫殿（Kaguya MemPalace）：Telegram Bot + MemPalace 记忆系统 + Inspector 监控面板。单用户 AI 伴侣系统，部署在 Ubuntu VPS。
 
 ## Stack
 
-- **Runtime**: Python 3.11, FastAPI, uvicorn
-- **LLM**: OpenAI SDK（走 OpenRouter），非流式工具循环
-- **Memory**: MemPalace CLI + ChromaDB（drawers）+ SQLite KG + JSONL 日志
-- **Telegram**: python-telegram-bot webhook 模式
-- **前端 Mini App**: React 18 + Vite + Tailwind CSS（即将新建）
-- **部署**: systemd + nginx 反代
+- **Runtime**: Python 3.11, python-telegram-bot (polling 模式)
+- **LLM**: OpenAI SDK 走 OpenRouter，非流式工具循环
+- **Memory**: MemPalace CLI + ChromaDB (drawers) + SQLite KG + JSONL 日志
+- **Inspector**: FastAPI + uvicorn，后台守护线程，端口 8765，bearer token 鉴权
+- **Mini App**: React 18 + Vite + Tailwind（即将新建），挂在 Inspector 同一个 FastAPI app 上
+- **部署**: systemd (`kaguya-gateway.service`) + nginx 反代
 
 ## Commands
 
 ```bash
-# 后端
 cd /home/ubuntu/apps/kaguya-gateway
-python main.py                              # 启动
-sudo systemctl restart kaguya-gateway       # 重启服务
-sudo journalctl -u kaguya-gateway -f        # 实时日志
+
+# 启动（前台）
+.venv/bin/python -m app.main
+
+# systemd
+sudo systemctl restart kaguya-gateway
+sudo journalctl -u kaguya-gateway -f
 
 # 前端 miniapp（新建后）
-cd miniapp && npm install
-cd miniapp && npm run dev                   # 本地开发
-cd miniapp && npm run build                 # 生产构建 → miniapp/dist/
+cd miniapp && npm install && npm run build
 ```
 
-## Key Directories
+## Architecture
 
 ```
-/home/ubuntu/apps/kaguya-gateway/
-├── main.py                    # 入口
-├── gateway/
-│   ├── server.py              # FastAPI 主应用，webhook + 路由注册
-│   ├── message_handler.py     # 消息处理核心（调 LLM + 工具循环）
-│   └── telegram_buffer.py     # Telegram 短消息缓冲 + 拆条发送
+app/main.py                          # 入口：启动 Telegram bot (polling) + Inspector (守护线程)
+├── python-telegram-bot polling      # 消息入口：text_message() → generate_reply()
+├── Inspector FastAPI (port 8765)    # 后台守护线程，bearer token 鉴权
+│   └── 即将扩展：/miniapp/* 路由    # Telegram initData 鉴权，SSE 流
+└── autosave/checkpoint              # 定期存档到 MemPalace
+```
+
+消息处理链路（全部在 app/main.py::text_message 中）：
+```
+用户消息 → text_message()
+  → asyncio.to_thread(generate_reply, ...)     # 跳到线程池
+    → app/llm/client.py::_run_tool_loop()       # 同步工具循环（在工作线程中）
+      → OpenAI API call (非流式)
+      → tool_calls? → execute_tool() → 下一轮
+      → 无 tool_calls → 返回 reply_text
+  → update.message.reply_text(reply)            # 发回 Telegram
+  → append_turn() + write_turn_summary()        # 存日志
+```
+
+## Key Files
+
+| 文件 | 职责 |
+|------|------|
+| `app/main.py` | 入口。Telegram bot + Inspector 启动 + 消息处理 + autosave |
+| `app/llm/client.py` | LLM 调用 + 工具循环 (`_run_tool_loop`)。**SSE 注入点在这里** |
+| `app/core/config.py` | Settings dataclass，从 .env 加载 |
+| `app/memory/tools.py` | MemPalace 工具定义 + `execute_tool()` |
+| `app/memory/palace.py` | MemPalace CLI 封装（wakeup / status / mine） |
+| `app/memory/transcript.py` | 对话记录读写（markdown 格式） |
+| `app/memory/state.py` | 消息计数状态 |
+| `app/inspector/api.py` | Inspector REST API（FastAPI app 工厂）。**miniapp 路由扩展在这里** |
+| `app/inspector/logger.py` | JSONL 日志读写 + `summarize_arguments()` |
+| `ops/prompts/` | 外置 prompt（core_identity / writing_constitution / system）**不要动** |
+| `ops/profiles/` | 外置 profile（sakuya / kaguya）**不要动** |
+
+## Directory Structure
+
+```
+kaguya-mempalace/
 ├── app/
-│   ├── core/config.py         # Settings dataclass
-│   ├── llm/client.py          # LLM 调用 + 工具循环（ToolLoopResult）
-│   ├── memory/
-│   │   ├── palace.py          # MemPalace CLI 封装
-│   │   └── tools.py           # OPENAI_TOOLS 定义 + execute_tool
-│   ├── inspector/
-│   │   ├── api.py             # Inspector REST API（bearer token 鉴权）
-│   │   ├── logger.py          # JSONL 日志读写
-│   │   └── static/            # Inspector 前端
-│   └── miniapp/               # ★ 即将新建 — Mini App 后端模块
+│   ├── main.py
+│   ├── core/config.py
+│   ├── llm/client.py
+│   ├── memory/{tools,palace,transcript,state}.py
+│   ├── inspector/{api,logger}.py
+│   ├── inspector/static/index.html
+│   ├── bot/                           # 目前为空
+│   └── miniapp/                       # ★ 即将新建
 │       ├── __init__.py
-│       ├── auth.py            # Telegram initData 鉴权
-│       ├── sse_manager.py     # SSE 通道管理
-│       └── routes.py          # /miniapp/* 路由
-├── miniapp/                   # ★ 即将新建 — Mini App 前端
-│   ├── src/
-│   ├── index.html
-│   ├── vite.config.js
-│   └── package.json
-├── ops/prompts/               # 外置 prompt 文件（core_identity, writing_constitution, system）
-├── ops/profiles/              # 外置 profile 文件（sakuya, kaguya）
-└── logs/                      # JSONL 日志目录
-    ├── token_usage.jsonl
-    ├── tool_calls.jsonl
-    └── turn_summaries.jsonl
+│       ├── auth.py                    # Telegram initData 鉴权
+│       └── sse.py                     # SSE 管理器（线程安全）
+├── ops/
+│   ├── prompts/{core_identity,writing_constitution,system}.md
+│   └── profiles/{sakuya,kaguya}.md
+├── runtime/                           # gitignored，运行时数据
+│   ├── palace/                        # ChromaDB
+│   ├── chats/                         # 对话 markdown
+│   ├── logs/                          # JSONL 日志
+│   ├── state/                         # 消息计数
+│   └── wakeup.txt
+├── miniapp/                           # ★ 即将新建 — React 前端
+├── systemd/kaguya-gateway.service
+└── .env
 ```
-
-## Architecture Decisions
-
-- **单用户系统**：不做多用户鉴权。Telegram initData 验证 = 足够。
-- **SSE 旁路推送**：SSE push 用 `put_nowait`，不阻塞 LLM 主链路。没有 SSE 连接时零开销。
-- **Inspector vs Mini App 鉴权分离**：Inspector 用 bearer token（SSH/浏览器访问），Mini App 用 Telegram initData（Telegram 内访问）。两者共享底层查询逻辑，不共享鉴权。
-- **数据源**：Mini App 读 JSONL 日志 + MemPalace 工具调用。不依赖 Supabase。
-- **非流式 LLM**：当前用 `openai.chat.completions.create()` 无 `stream=True`。SSE 推送的是工具调用过程，不是逐字 thinking/replying。
-
-## Coding Conventions
-
-- Python：类型注解，`from __future__ import annotations`，logging 用 stdlib logger
-- 新模块放 `app/` 下，用 `app.xxx.yyy` 的 import 路径
-- FastAPI router 用 `APIRouter(prefix=..., tags=[...])`
-- 前端：React 函数组件 + hooks，Tailwind utility classes，JSX 扩展名
-- Commit：Conventional Commits，中文 body 可以
 
 ## Critical Gotchas
 
-- **不要动 `ops/prompts/` 和 `ops/profiles/`**：这些是人格和写作宪法文件，由朔夜手工维护
-- **不要改 `app/inspector/api.py` 的鉴权逻辑**：Inspector 的 bearer token 验证保持不变
-- **不要改 `app/llm/client.py` 的 LLM 调用逻辑**：只在工具循环中插入 SSE push 旁路
+- **不要动 `ops/`**：prompts 和 profiles 由朔夜手工维护
+- **不要改 Inspector 现有端点的鉴权**：bearer token 验证保持不变
+- **不要改 `_run_tool_loop` 的逻辑流程**：只在循环中插入 SSE push 旁路调用
 - **不要改 `app/memory/tools.py`**：MemPalace 工具定义不动
-- **Vite base 路径**：`vite.config.js` 中 `base: '/miniapp/'` 永远不改
-- **Nginx SSE**：SSE 端点需要 `X-Accel-Buffering: no` + `proxy_buffering off`
+- **Inspector 是守护线程**：跑在 `threading.Thread(daemon=True)` 里，与 Telegram bot 共享进程
+- **LLM 调用在工作线程中**：`_run_tool_loop` 通过 `asyncio.to_thread()` 跑在线程池。SSE push 从工作线程调用，需要线程安全
+- **Vite base 路径**：`vite.config.js` 中 `base: '/miniapp/'`
 
-## Detailed Documentation
+## Coding Conventions
 
-当处理 Mini App 相关任务时，先读对应的任务文档：
-
-- `docs/miniapp_spec.md` — Mini App 完整设计规格书
-- `docs/tasks/` — 分阶段任务文档
+- `from __future__ import annotations`
+- logging 用 stdlib `logging.getLogger(__name__)`
+- 新模块放 `app/` 下
+- Commit：Conventional Commits，中文 body
