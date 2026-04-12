@@ -42,14 +42,14 @@ class RealtimeEventBus:
     def current(self, chat_id: str = "") -> dict[str, Any]:
         with self._lock:
             if chat_id:
-                for item in reversed(self._history):
-                    if str(item.get("chat_id") or "") == chat_id:
-                        return deepcopy(item)
-
                 for turn_id in reversed(list(self._turn_state.keys())):
                     state = self._turn_state.get(turn_id) or {}
                     if str(state.get("chat_id") or "") == chat_id:
                         return deepcopy(state)
+
+                for item in reversed(self._history):
+                    if str(item.get("chat_id") or "") == chat_id:
+                        return deepcopy(item)
                 return {}
 
             if not self._latest_turn_id:

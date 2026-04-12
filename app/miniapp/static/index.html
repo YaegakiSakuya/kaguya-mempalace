@@ -5,42 +5,95 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kaguya Mini App</title>
   <link rel="stylesheet" href="/miniapp/tokens.css" />
-  <style>
-    *{box-sizing:border-box} body{margin:0;background:var(--color-bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--color-text)}
-    .page{max-width:780px;margin:0 auto;min-height:100vh;padding:env(safe-area-inset-top,8px) 16px env(safe-area-inset-bottom,24px)}
-    .top{display:flex;justify-content:space-between;align-items:center;padding:12px 0 18px}
-    .btn{border:none;border-radius:999px;background:var(--color-surface);box-shadow:var(--shadow-card);padding:10px 12px;cursor:pointer}
-    .line{font-size:13px;color:var(--color-text-secondary)}
-    .card{border:1px solid #fff;background:var(--color-surface);border-radius:var(--radius-card);padding:14px;box-shadow:var(--shadow-card);margin-bottom:12px}
-    .tag{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--color-text-secondary)}
-    pre{white-space:pre-wrap;word-break:break-word;margin:8px 0 0;font-size:13px;line-height:1.55}
-    .history-item{border-radius:20px;background:var(--color-surface);padding:12px 14px;margin:8px 0;border:1px solid #fff;box-shadow:var(--shadow-card)}
-    .sheet-wrap{position:fixed;inset:0;display:none;justify-content:flex-end;z-index:20}
-    .sheet-wrap.open{display:flex}
-    .sheet-backdrop{position:absolute;inset:0;background:rgba(30,41,59,.08)}
-    .sheet{position:relative;max-width:780px;width:100%;margin:0 auto;background:var(--color-surface);border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;padding:18px;box-shadow:var(--shadow-sheet)}
-    .dot{display:inline-block;width:7px;height:7px;border-radius:999px;background:var(--color-accent);animation:pulse 1.2s infinite}
-  </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .page { max-width: 820px; margin: 0 auto; min-height: 100vh; padding: env(safe-area-inset-top, 0px) 16px env(safe-area-inset-bottom, 0px); }
+    .content { min-height: 100vh; display: flex; flex-direction: column; padding: 18px 0 26px; }
+
+    .topbar { position: relative; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+    .top-btn { z-index: 2; width: 40px; height: 40px; border: 0; border-radius: 999px; background: var(--color-surface); color: var(--color-text-secondary); box-shadow: var(--shadow-button); cursor: pointer; }
+    .top-btn:hover { color: var(--color-text); }
+    .heartbeat { pointer-events: none; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+    .hb-online { stroke-dasharray: 160; animation: ecg-flow 6s infinite; }
+    .hb-offline { animation: offline-flicker 1.4s infinite; }
+
+    .card { border: 1px solid #fff; background: var(--color-surface); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
+    .status-error { margin-bottom: 10px; padding: 10px 12px; border-radius: 12px; color: var(--color-danger); background: rgba(220, 38, 38, 0.08); font-size: 12px; }
+
+    .current { margin-bottom: 12px; padding: 14px 14px 12px; }
+    .label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-secondary); font-weight: 700; }
+    .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--color-accent); animation: pulse-dot 1.2s infinite; }
+    .mono { margin: 8px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.58; }
+    .bubble { margin-top: 8px; border-radius: 16px; background: #f9f8f6; padding: 10px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+    .stats { margin-top: 10px; border-top: 1px solid var(--color-border); padding-top: 8px; display: flex; justify-content: space-between; gap: 8px; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--color-text-secondary); font-weight: 700; }
+
+    .thinking-toggle { margin-top: 8px; border: 0; width: 100%; border-radius: 14px; background: #f7f7f7; padding: 9px 10px; text-align: left; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-secondary); font-weight: 700; cursor: pointer; }
+    .thinking-body { margin-top: 6px; border-radius: 14px; background: #f7f7f7; padding: 10px; font-size: 12px; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+
+    .history-wrap { flex: 1; }
+    .history-list { display: flex; flex-direction: column; gap: 9px; padding: 2px 0 6px; }
+    .hist-item { overflow: hidden; }
+    .hist-head { width: 100%; border: 0; background: transparent; text-align: left; padding: 12px 14px; cursor: pointer; }
+    .hist-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .hist-time { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--color-accent); font-weight: 700; }
+    .hist-meta { margin-top: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--color-text-secondary); font-weight: 700; }
+    .hist-body { border-top: 1px solid #f1efec; background: #faf9f7; padding: 12px 14px; }
+    .section-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-secondary); font-weight: 700; margin: 0 0 5px; }
+    .tool-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .tool { border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 700; }
+    .tool.ok { background: rgba(22, 163, 74, .12); color: var(--color-success); }
+    .tool.err { background: rgba(220, 38, 38, .1); color: var(--color-danger); }
+    .tool.run { background: rgba(148, 163, 184, .2); color: #64748b; }
+
+    .empty { padding: 24px; text-align: center; font-size: 13px; color: var(--color-text-secondary); }
+
+    .sheet-wrap { position: fixed; inset: 0; z-index: 30; display: none; justify-content: flex-end; }
+    .sheet-wrap.open { display: flex; }
+    .sheet-bg { position: absolute; inset: 0; background: rgba(30, 41, 59, .08); backdrop-filter: blur(2px); }
+    .sheet { position: relative; width: min(820px, 100%); margin: auto auto 0; background: var(--color-surface); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; box-shadow: var(--shadow-sheet); padding: 16px 18px 24px; }
+    .sheet-handle { width: 44px; height: 5px; border-radius: 999px; background: rgba(148,163,184,.35); margin: 2px auto 14px; }
+    .menu-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .menu-card { border: 1px solid var(--color-border); border-radius: 18px; padding: 12px; background: #fff; }
+    .menu-title { margin: 0; font-size: 14px; font-weight: 600; }
+    .menu-sub { margin: 5px 0 0; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--color-text-secondary); font-weight: 700; }
+  </style>
 </head>
 <body>
   <div class="page">
-    <div class="top">
-      <button class="btn" id="menuBtn">☰</button>
-      <div class="line" id="statusLine">Connecting…</div>
-      <button class="btn" id="refreshBtn">↻</button>
-    </div>
+    <div class="content">
+      <div class="topbar">
+        <button id="menuBtn" class="top-btn">☰</button>
+        <div class="heartbeat">
+          <svg width="120" height="26" viewBox="0 0 120 26" fill="none" aria-hidden="true">
+            <path id="hbOnline" class="hb-online" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" d="M5 13 L42 13 L47 18 L52 3 L57 21 L62 13 L73 13 L78 10 L84 13 L115 13" />
+            <path id="hbOffline" class="hb-offline" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" d="M5 13 L115 13" style="display:none" />
+          </svg>
+        </div>
+        <button id="refreshBtn" class="top-btn">↻</button>
+      </div>
 
-    <div class="card" id="currentCard"><div class="tag">Current process</div><pre id="currentText">Waiting for events…</pre></div>
-    <div id="history"></div>
+      <div id="errorBox" class="status-error" style="display:none"></div>
+
+      <section id="currentCard" class="card current"></section>
+
+      <section class="history-wrap">
+        <div id="historyList" class="history-list"></div>
+      </section>
+    </div>
   </div>
 
-  <div class="sheet-wrap" id="sheetWrap">
-    <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div id="sheetWrap" class="sheet-wrap">
+    <div id="sheetBg" class="sheet-bg"></div>
     <div class="sheet">
-      <div class="tag">Menu</div>
-      <p id="identity" class="line">No identity</p>
-      <p class="line">This Mini App shows only your own chat runtime history.</p>
+      <div class="sheet-handle"></div>
+      <div class="menu-grid">
+        <div class="menu-card"><p class="menu-title">Profile</p><p id="menuIdentity" class="menu-sub">Not connected</p></div>
+        <div class="menu-card"><p class="menu-title">Realtime</p><p id="menuRealtime" class="menu-sub">Disconnected</p></div>
+        <div class="menu-card"><p class="menu-title">Session</p><p id="menuSession" class="menu-sub">Unknown</p></div>
+        <div class="menu-card"><p class="menu-title">History</p><p id="menuHistoryCount" class="menu-sub">0 turns</p></div>
+      </div>
     </div>
   </div>
 
@@ -50,114 +103,344 @@
   tg?.ready();
   tg?.expand();
 
-  let token = '';
-  let es = null;
+  const state = {
+    token: '',
+    connected: false,
+    error: '',
+    currentTurn: createEmptyTurn(),
+    history: [],
+    expandedHistoryTurn: '',
+    showCurrentThinking: false,
+    user: null,
+    es: null,
+  };
 
-  const statusLine = document.getElementById('statusLine');
-  const currentText = document.getElementById('currentText');
-  const historyEl = document.getElementById('history');
-  const identityEl = document.getElementById('identity');
+  const $ = (id) => document.getElementById(id);
 
-  function setStatus(s) { statusLine.textContent = s; }
+  function createEmptyTurn() {
+    return {
+      turn_id: '',
+      status: 'idle',
+      created_at: '',
+      completed_at: '',
+      user_text: '',
+      processing_messages: [],
+      thinking_text: '',
+      reply_text: '',
+      thinking_ms: 0,
+      replying_ms: 0,
+      tool_calls: [],
+      stats: {},
+    };
+  }
 
-  async function auth() {
+  function setError(msg) {
+    state.error = msg || '';
+    const el = $('errorBox');
+    el.style.display = state.error ? 'block' : 'none';
+    el.textContent = state.error;
+  }
+
+  function getStatusLabel(turn) {
+    if (!turn.turn_id && turn.status === 'idle') return 'Idle';
+    return (turn.status || 'idle').toUpperCase();
+  }
+
+  function formatTime(ts) {
+    if (!ts) return 'Unknown time';
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return ts;
+    return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderHeartbeat() {
+    $('hbOnline').style.display = state.connected ? 'block' : 'none';
+    $('hbOffline').style.display = state.connected ? 'none' : 'block';
+  }
+
+  function renderCurrent() {
+    const t = state.currentTurn;
+    const card = $('currentCard');
+    const stats = t.stats || {};
+    const processingText = (t.processing_messages || []).slice(-1)[0] || 'Waiting for next message';
+
+    const thinkingToggle = t.thinking_text
+      ? `<button id="currentThinkingToggle" class="thinking-toggle">Thoughts (${((t.thinking_ms || stats.thinking_ms || 0) / 1000).toFixed(1)}s) ${state.showCurrentThinking ? 'Hide' : 'Show'}</button>
+         ${state.showCurrentThinking ? `<div class="thinking-body">${escapeHtml(t.thinking_text)}</div>` : ''}`
+      : '';
+
+    const replyBlock = t.reply_text
+      ? `<div class="bubble">${escapeHtml(t.reply_text)}</div>`
+      : `<div class="mono">${escapeHtml(processingText)}</div>`;
+
+    card.innerHTML = `
+      <p class="label"><span class="dot"></span>${getStatusLabel(t)}</p>
+      ${t.user_text ? `<div class="mono">User: ${escapeHtml(t.user_text)}</div>` : ''}
+      ${(t.status === 'processing' && processingText) ? `<div class="mono">${escapeHtml(processingText)}</div>` : ''}
+      ${thinkingToggle}
+      ${replyBlock}
+      <div class="stats">
+        <span>Tokens ${stats.input_tokens ?? '—'}/${stats.output_tokens ?? '—'}</span>
+        <span>${stats.thinking_ms ?? t.thinking_ms ?? 0}ms / ${stats.replying_ms ?? t.replying_ms ?? 0}ms</span>
+      </div>
+    `;
+
+    const toggle = $('currentThinkingToggle');
+    if (toggle) {
+      toggle.onclick = () => {
+        state.showCurrentThinking = !state.showCurrentThinking;
+        renderCurrent();
+      };
+    }
+  }
+
+  function renderHistory() {
+    const wrap = $('historyList');
+    $('menuHistoryCount').textContent = `${state.history.length} turns`;
+
+    if (!state.history.length) {
+      wrap.innerHTML = '<div class="card empty">No history yet for this chat.</div>';
+      return;
+    }
+
+    wrap.innerHTML = state.history.map((item) => {
+      const id = item.turn_id || item.completed_at || item.created_at || Math.random().toString(36).slice(2);
+      const open = state.expandedHistoryTurn === id;
+      const stats = item.stats || {};
+      const tools = (item.tool_calls || []).map((tool) => {
+        const klass = tool.status === 'running' ? 'run' : (tool.success ? 'ok' : 'err');
+        return `<span class="tool ${klass}">${escapeHtml(tool.name || 'tool')}</span>`;
+      }).join('');
+
+      return `
+      <article class="card hist-item">
+        <button class="hist-head" data-hist="${escapeHtmlAttr(id)}">
+          <div class="hist-row"><span class="hist-time">${formatTime(item.completed_at || item.created_at)}</span><span>${open ? '▴' : '▾'}</span></div>
+          <div class="hist-meta">${stats.input_tokens ?? '—'} IN / ${stats.output_tokens ?? '—'} OUT · ${stats.thinking_ms ?? item.thinking_ms ?? 0}ms / ${stats.replying_ms ?? item.replying_ms ?? 0}ms</div>
+        </button>
+        ${open ? `
+        <div class="hist-body">
+          ${item.user_text ? `<p class="section-tag">User</p><div class="bubble">${escapeHtml(item.user_text)}</div>` : ''}
+          ${item.thinking_text ? `<p class="section-tag" style="margin-top:10px">Thoughts</p><div class="thinking-body">${escapeHtml(item.thinking_text)}</div>` : ''}
+          <p class="section-tag" style="margin-top:10px">Response</p>
+          <div class="bubble">${escapeHtml(item.reply_text || 'No response recorded')}</div>
+          ${tools ? `<div class="tool-row">${tools}</div>` : ''}
+        </div>
+        ` : ''}
+      </article>`;
+    }).join('');
+
+    wrap.querySelectorAll('[data-hist]').forEach((btn) => {
+      btn.onclick = () => {
+        const id = btn.getAttribute('data-hist') || '';
+        state.expandedHistoryTurn = state.expandedHistoryTurn === id ? '' : id;
+        renderHistory();
+      };
+    });
+  }
+
+  function renderMeta() {
+    $('menuIdentity').textContent = state.user ? `${state.user.first_name || ''} #${state.user.id}` : 'Not connected';
+    $('menuRealtime').textContent = state.connected ? 'Connected' : 'Disconnected';
+    $('menuSession').textContent = state.token ? 'Authenticated' : 'Missing';
+    renderHeartbeat();
+  }
+
+  function ensureCurrentTurn(partial, forceReset = false) {
+    const incomingTurnId = partial.turn_id || '';
+    const shouldStartNew = forceReset ||
+      (incomingTurnId && state.currentTurn.turn_id && incomingTurnId !== state.currentTurn.turn_id && state.currentTurn.status === 'done') ||
+      (incomingTurnId && !state.currentTurn.turn_id);
+
+    if (shouldStartNew) {
+      state.currentTurn = { ...createEmptyTurn(), ...partial };
+      state.showCurrentThinking = false;
+      return;
+    }
+
+    state.currentTurn = {
+      ...state.currentTurn,
+      ...partial,
+      processing_messages: partial.processing_messages ?? state.currentTurn.processing_messages,
+      tool_calls: partial.tool_calls ?? state.currentTurn.tool_calls,
+      stats: partial.stats ?? state.currentTurn.stats,
+    };
+  }
+
+  function mergeRealtimeEvent(eventType, payload) {
+    const p = payload || {};
+
+    if (eventType === 'processing') {
+      const processingMessages = [...(state.currentTurn.processing_messages || [])];
+      if (p.message) processingMessages.push(p.message);
+      ensureCurrentTurn({
+        turn_id: p.turn_id || state.currentTurn.turn_id,
+        status: 'processing',
+        user_text: p.user_text || state.currentTurn.user_text,
+        processing_messages: processingMessages.slice(-12),
+        created_at: state.currentTurn.created_at || new Date().toISOString(),
+      }, !!(p.turn_id && p.turn_id !== state.currentTurn.turn_id));
+    }
+
+    if (eventType === 'thinking') {
+      ensureCurrentTurn({
+        turn_id: p.turn_id || state.currentTurn.turn_id,
+        status: 'thinking',
+        thinking_text: `${state.currentTurn.thinking_text || ''}${p.chunk || ''}`,
+        thinking_ms: Number(p.elapsed_ms || state.currentTurn.thinking_ms || 0),
+      });
+    }
+
+    if (eventType === 'replying') {
+      ensureCurrentTurn({
+        turn_id: p.turn_id || state.currentTurn.turn_id,
+        status: 'replying',
+        reply_text: `${state.currentTurn.reply_text || ''}${p.chunk || ''}`,
+        replying_ms: Number(p.elapsed_ms || state.currentTurn.replying_ms || 0),
+      });
+    }
+
+    if (eventType === 'tool_start') {
+      const calls = [...(state.currentTurn.tool_calls || [])];
+      calls.push({ name: p.tool_name || 'unknown', status: 'running', success: null, elapsed_ms: null });
+      ensureCurrentTurn({ tool_calls: calls.slice(-20) });
+    }
+
+    if (eventType === 'tool_end') {
+      const calls = [...(state.currentTurn.tool_calls || [])];
+      for (let i = calls.length - 1; i >= 0; i--) {
+        if (calls[i].name === (p.tool_name || 'unknown') && calls[i].status === 'running') {
+          calls[i] = { ...calls[i], status: 'done', success: !!p.success, elapsed_ms: p.elapsed_ms ?? null };
+          break;
+        }
+      }
+      ensureCurrentTurn({ tool_calls: calls });
+    }
+
+    if (eventType === 'done') {
+      ensureCurrentTurn({
+        turn_id: p.turn_id || state.currentTurn.turn_id,
+        status: 'done',
+        stats: {
+          ...(state.currentTurn.stats || {}),
+          input_tokens: p.input_tokens ?? state.currentTurn.stats?.input_tokens ?? null,
+          output_tokens: p.output_tokens ?? state.currentTurn.stats?.output_tokens ?? null,
+          thinking_ms: p.thinking_ms ?? state.currentTurn.thinking_ms ?? null,
+          replying_ms: p.replying_ms ?? state.currentTurn.replying_ms ?? null,
+        },
+        completed_at: new Date().toISOString(),
+      });
+      void loadHistory();
+    }
+
+    renderCurrent();
+  }
+
+  async function api(path, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    if (state.token) headers.Authorization = `Bearer ${state.token}`;
+    const res = await fetch(path, { ...options, headers });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async function authMiniapp() {
     const initData = tg?.initData || '';
     if (!initData) {
-      setStatus('No Telegram initData (open via Telegram)');
-      return false;
+      throw new Error('No Telegram initData found. Open from bot /start button.');
     }
-    const res = await fetch('/api/miniapp/auth', {
+    const data = await api('/api/miniapp/auth', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ init_data: initData })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ init_data: initData }),
     });
-    if (!res.ok) {
-      setStatus('Auth failed');
-      return false;
-    }
-    const data = await res.json();
-    token = data.token;
-    identityEl.textContent = `User: ${data.user?.first_name || ''} (#${data.chat_id})`;
-    return true;
+    state.token = data.token;
+    state.user = data.user || null;
   }
 
-  function renderCurrent(item) {
-    if (!item || !item.turn_id) {
-      currentText.textContent = 'Idle';
-      return;
-    }
-    const stats = item.stats || {};
-    const msg = (item.processing_messages || []).slice(-1)[0] || '';
-    currentText.textContent = [
-      `status: ${item.status}`,
-      msg ? `processing: ${msg}` : '',
-      item.thinking_text ? `\n[thinking]\n${item.thinking_text}` : '',
-      item.reply_text ? `\n[reply]\n${item.reply_text}` : '',
-      stats.input_tokens != null ? `\nTOKENS ${stats.input_tokens}/${stats.output_tokens}` : ''
-    ].filter(Boolean).join('\n');
+  async function hydrateCurrent() {
+    const current = await api('/api/miniapp/current');
+    state.currentTurn = { ...createEmptyTurn(), ...(current || {}) };
+    renderCurrent();
   }
 
-  function renderHistory(items) {
-    historyEl.innerHTML = '';
-    if (!items.length) {
-      historyEl.innerHTML = '<div class="card"><div class="tag">History</div><pre>No history yet.</pre></div>';
-      return;
-    }
-    items.forEach((it) => {
-      const div = document.createElement('div');
-      div.className = 'history-item';
-      const t = new Date(it.completed_at || it.created_at || Date.now()).toLocaleString();
-      const stats = it.stats || {};
-      div.innerHTML = `<div class="tag">${t}</div><pre>${(it.reply_text || 'No reply').slice(0, 700)}\n\nTOKENS ${stats.input_tokens ?? '—'}/${stats.output_tokens ?? '—'}</pre>`;
-      historyEl.appendChild(div);
-    });
-  }
-
-  async function loadCurrentHistory() {
-    const headers = { Authorization: `Bearer ${token}` };
-    const [currentRes, historyRes] = await Promise.all([
-      fetch('/api/miniapp/current', { headers }),
-      fetch('/api/miniapp/history?limit=20', { headers })
-    ]);
-    if (currentRes.ok) renderCurrent(await currentRes.json());
-    if (historyRes.ok) {
-      const h = await historyRes.json();
-      renderHistory(h.items || []);
-    }
+  async function loadHistory() {
+    const data = await api('/api/miniapp/history?limit=20');
+    state.history = data.items || [];
+    renderHistory();
   }
 
   function connectStream() {
-    if (es) es.close();
-    es = new EventSource(`/api/miniapp/stream?token=${encodeURIComponent(token)}`);
-    setStatus('Live <span class="dot"></span>');
-    es.addEventListener('processing', (e) => {
-      const d = JSON.parse(e.data || '{}');
-      renderCurrent({status:'processing',processing_messages:[d.message || 'Processing']});
+    if (state.es) state.es.close();
+    state.es = new EventSource(`/api/miniapp/stream?token=${encodeURIComponent(state.token)}`);
+
+    state.es.onopen = () => {
+      state.connected = true;
+      setError('');
+      renderMeta();
+    };
+
+    ['processing', 'thinking', 'replying', 'tool_start', 'tool_end', 'done'].forEach((eventType) => {
+      state.es.addEventListener(eventType, (event) => {
+        try {
+          mergeRealtimeEvent(eventType, JSON.parse(event.data || '{}'));
+        } catch (err) {
+          setError(`Stream parse error: ${String(err)}`);
+        }
+      });
     });
-    es.addEventListener('thinking', (e) => {
-      const d = JSON.parse(e.data || '{}');
-      renderCurrent({status:'thinking',thinking_text:d.chunk || ''});
-    });
-    es.addEventListener('replying', (e) => {
-      const d = JSON.parse(e.data || '{}');
-      renderCurrent({status:'replying',reply_text:d.chunk || ''});
-    });
-    es.addEventListener('done', async () => {
-      await loadCurrentHistory();
-    });
-    es.onerror = () => setStatus('Reconnecting stream…');
+
+    state.es.onerror = () => {
+      state.connected = false;
+      setError('Realtime connection interrupted. Auto-reconnecting…');
+      renderMeta();
+    };
   }
 
-  document.getElementById('refreshBtn').onclick = () => loadCurrentHistory();
-  document.getElementById('menuBtn').onclick = () => document.getElementById('sheetWrap').classList.add('open');
-  document.getElementById('sheetBackdrop').onclick = () => document.getElementById('sheetWrap').classList.remove('open');
+  function bindUi() {
+    $('refreshBtn').onclick = async () => {
+      try {
+        await Promise.all([hydrateCurrent(), loadHistory()]);
+      } catch (err) {
+        setError(String(err));
+      }
+    };
 
-  (async () => {
-    const ok = await auth();
-    if (!ok) return;
-    await loadCurrentHistory();
-    connectStream();
-  })();
+    $('menuBtn').onclick = () => $('sheetWrap').classList.add('open');
+    $('sheetBg').onclick = () => $('sheetWrap').classList.remove('open');
+  }
+
+  function escapeHtml(text) {
+    return String(text || '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function escapeHtmlAttr(text) {
+    return escapeHtml(text).replaceAll('`', '&#096;');
+  }
+
+  async function bootstrap() {
+    bindUi();
+    renderCurrent();
+    renderHistory();
+    renderMeta();
+
+    try {
+      await authMiniapp();
+      await Promise.all([hydrateCurrent(), loadHistory()]);
+      connectStream();
+      renderMeta();
+    } catch (err) {
+      setError(String(err));
+      renderMeta();
+    }
+  }
+
+  void bootstrap();
 })();
 </script>
 </body>
