@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import StreamPage from './pages/StreamPage'
+import PalacePage from './pages/PalacePage'
 
 function Header() {
   return (
@@ -36,28 +37,13 @@ function TabBar({ tab, onTabChange }) {
   )
 }
 
-function PalacePlaceholder() {
-  return (
-    <div className="px-4 pt-8">
-      <div className="card p-6 text-center">
-        <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-          🏛 即将推出
-        </p>
-        <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>
-          宫殿监控面板正在开发中
-        </p>
-      </div>
-    </div>
-  )
-}
-
 export default function App() {
   const [tab, setTab] = useState('stream')
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <Header />
       <TabBar tab={tab} onTabChange={setTab} />
-      {tab === 'stream' ? <StreamPage /> : <PalacePlaceholder />}
+      {tab === 'stream' ? <StreamPage /> : <PalacePage />}
     </div>
   )
 }
