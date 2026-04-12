@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -11,10 +12,12 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from app.core.config import Settings
 from app.inspector.logger import read_jsonl_tail
+from app.miniapp.auth import verify_init_data_raw, verify_telegram_init_data
+from app.miniapp.sse import sse_manager
 
 logger = logging.getLogger(__name__)
 
@@ -434,6 +437,91 @@ def create_inspector_app(settings: Settings) -> FastAPI:
     @app.get("/api/turns", dependencies=[Depends(auth)])
     async def turns(last_n: int = Query(default=20, le=200)):
         return read_jsonl_tail(settings.logs_dir / "turn_summaries.jsonl", last_n)
+
+    # ===== Mini App 路由 =====
+
+    # SSE 流（initData 通过 query param 传入，EventSource 不支持自定义 header）
+    @app.get("/miniapp/stream")
+    async def miniapp_sse_stream(request: Request, initData: str = Query(default="")):
+        try:
+            verify_init_data_raw(initData)
+        except ValueError as exc:
+            return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+        queue = await sse_manager.connect()
+
+        async def event_generator():
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        item = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+                    if item is None:
+                        break
+                    yield f"event: {item['event']}\ndata: {item['data']}\n\n"
+            except asyncio.CancelledError:
+                pass
+            finally:
+                await sse_manager.disconnect(queue)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    # 以下路由走 Telegram initData 鉴权
+    miniapp_auth = [Depends(verify_telegram_init_data)]
+
+    @app.get("/miniapp/history", dependencies=miniapp_auth)
+    async def miniapp_history(limit: int = Query(default=20, le=100)):
+        items = read_jsonl_tail(settings.logs_dir / "turn_summaries.jsonl", limit)
+        items.reverse()
+        return {"items": items}
+
+    @app.get("/miniapp/history/tools", dependencies=miniapp_auth)
+    async def miniapp_tool_history(limit: int = Query(default=50, le=200)):
+        items = read_jsonl_tail(settings.logs_dir / "tool_calls.jsonl", limit)
+        items.reverse()
+        return {"items": items}
+
+    @app.get("/miniapp/palace/overview", dependencies=miniapp_auth)
+    async def miniapp_palace_overview():
+        """复用 overview 的查询逻辑，返回宫殿统计。"""
+        return await overview()
+
+    @app.get("/miniapp/palace/wings", dependencies=miniapp_auth)
+    async def miniapp_palace_wings():
+        return await list_wings()
+
+    @app.get("/miniapp/palace/rooms", dependencies=miniapp_auth)
+    async def miniapp_palace_rooms(wing: str = Query(...)):
+        return await list_rooms(wing=wing)
+
+    @app.get("/miniapp/palace/drawers", dependencies=miniapp_auth)
+    async def miniapp_palace_drawers(
+        wing: str = Query(default=""),
+        room: str = Query(default=""),
+        limit: int = Query(default=20, le=100),
+        offset: int = Query(default=0, ge=0),
+    ):
+        return await list_drawers(wing=wing, room=room, limit=limit, offset=offset)
+
+    @app.get("/miniapp/palace/diary", dependencies=miniapp_auth)
+    async def miniapp_palace_diary(limit: int = Query(default=10, le=50)):
+        return await diary(agent="kaguya", limit=limit)
+
+    @app.get("/miniapp/palace/kg", dependencies=miniapp_auth)
+    async def miniapp_palace_kg():
+        return await kg_stats()
 
     return app
 

@@ -12,6 +12,7 @@ from openai import OpenAI
 from app.core.config import Settings
 from app.inspector.logger import append_jsonl, summarize_arguments, _now_iso
 from app.memory.tools import OPENAI_TOOLS, execute_tool
+from app.miniapp.sse import sse_manager
 
 Turn = Tuple[str, str]
 
@@ -314,6 +315,14 @@ def _run_tool_loop(
 
     result = ToolLoopResult(reply_text="")
 
+    loop_start = time.monotonic()
+
+    if sse_manager.has_active_connection():
+        sse_manager.push("processing", {
+            "step": "start",
+            "message": "正在处理消息...",
+        })
+
     for round_index in range(max_tool_rounds):
         response = client.chat.completions.create(
             model=settings.openrouter_model,
@@ -370,6 +379,13 @@ def _run_tool_loop(
                 except json.JSONDecodeError:
                     args_dict = {}
 
+                if sse_manager.has_active_connection():
+                    sse_manager.push("tool_call", {
+                        "tool": tool_name,
+                        "round": round_index + 1,
+                        "args_summary": summarize_arguments(tool_name, args_dict),
+                    })
+
                 t0 = time.monotonic()
                 error_msg = None
                 success = True
@@ -418,6 +434,14 @@ def _run_tool_loop(
                     "error": error_msg,
                 })
 
+                if sse_manager.has_active_connection():
+                    sse_manager.push("tool_done", {
+                        "tool": tool_name,
+                        "round": round_index + 1,
+                        "success": success,
+                        "duration_ms": elapsed_ms,
+                    })
+
                 messages.append(
                     {
                         "role": "tool",
@@ -434,6 +458,21 @@ def _run_tool_loop(
             raise RuntimeError("LLM returned empty content")
 
         result.reply_text = reply
+
+        total_elapsed = int((time.monotonic() - loop_start) * 1000)
+        if sse_manager.has_active_connection():
+            sse_manager.push("done", {
+                "input_tokens": result.total_prompt_tokens,
+                "output_tokens": result.total_completion_tokens,
+                "rounds": result.total_rounds,
+                "tools": result.tools_called,
+                "tools_succeeded": result.tools_succeeded,
+                "tools_failed": result.tools_failed,
+                "palace_writes": result.palace_writes,
+                "elapsed_ms": total_elapsed,
+                "response_preview": reply[:200] if reply else "",
+            })
+
         return result
 
     raise RuntimeError("LLM exceeded maximum MemPalace tool-calling rounds")
