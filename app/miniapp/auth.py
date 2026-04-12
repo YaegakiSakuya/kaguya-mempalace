@@ -89,7 +89,10 @@ def verify_session_token(settings: Settings, token: str) -> dict:
         payload_part.encode("utf-8"),
         hashlib.sha256,
     ).digest()
-    provided_sig = _b64url_decode(sig_part)
+    try:
+        provided_sig = _b64url_decode(sig_part)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=401, detail="invalid session token signature") from exc
     if not hmac.compare_digest(expected_sig, provided_sig):
         raise HTTPException(status_code=401, detail="invalid session token signature")
 

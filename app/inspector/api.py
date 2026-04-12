@@ -465,6 +465,9 @@ def create_inspector_app(settings: Settings) -> FastAPI:
 
     @app.get("/api/realtime/stream")
     async def realtime_stream(request: Request, token: str = Query(default="")):
+        if not settings.inspector_token:
+            raise HTTPException(status_code=401, detail="Inspector auth is disabled")
+
         auth_header = request.headers.get("authorization", "")
         header_ok = auth_header.startswith("Bearer ") and auth_header[7:] == settings.inspector_token
         if not header_ok and token != settings.inspector_token:
