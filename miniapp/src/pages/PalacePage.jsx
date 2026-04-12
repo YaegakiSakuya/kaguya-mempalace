@@ -23,8 +23,10 @@ export default function PalacePage() {
       if (ovRes) setOverview(ovRes)
       if (wRes?.wings) setWings(wRes.wings)
       else if (Array.isArray(wRes)) setWings(wRes)
-      if (dRes?.entries) setDiary(dRes.entries)
-      else if (Array.isArray(dRes)) setDiary(dRes)
+      if (Array.isArray(dRes)) setDiary(dRes)
+      else if (dRes?.entries) setDiary(dRes.entries)
+      else if (dRes?.diary) setDiary(Array.isArray(dRes.diary) ? dRes.diary : [])
+      else if (dRes && typeof dRes === 'object') setDiary([dRes])
     }
     load()
   }, [get])

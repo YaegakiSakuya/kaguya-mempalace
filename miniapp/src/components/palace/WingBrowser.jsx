@@ -52,9 +52,13 @@ function RoomItem({ wing, room }) {
       const data = await get(
         `/miniapp/palace/drawers?wing=${encodeURIComponent(wing)}&room=${encodeURIComponent(room)}&limit=10`
       )
-      if (data?.drawers) setDrawers(data.drawers)
-      else if (Array.isArray(data)) setDrawers(data)
-      setLoaded(true)
+      if (data?.drawers) {
+        setDrawers(data.drawers)
+        setLoaded(true)
+      } else if (Array.isArray(data)) {
+        setDrawers(data)
+        setLoaded(true)
+      }
     }
   }
 
@@ -100,9 +104,13 @@ function WingItem({ wing, isOpen, onToggle }) {
       const data = await get(
         `/miniapp/palace/rooms?wing=${encodeURIComponent(wing)}`
       )
-      if (data?.rooms) setRooms(data.rooms)
-      else if (Array.isArray(data)) setRooms(data)
-      setLoaded(true)
+      if (data?.rooms) {
+        setRooms(data.rooms)
+        setLoaded(true)
+      } else if (Array.isArray(data)) {
+        setRooms(data)
+        setLoaded(true)
+      }
     }
   }
 
