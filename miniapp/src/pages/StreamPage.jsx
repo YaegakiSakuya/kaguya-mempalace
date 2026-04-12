@@ -12,7 +12,7 @@ export default function StreamPage() {
 
   const fetchHistory = useCallback(async () => {
     const data = await get('/miniapp/history?limit=20')
-    if (data) setHistory(data)
+    if (data?.items) setHistory(data.items)
   }, [get])
 
   const { status, events, stats, connected } = useSSE(initData, fetchHistory)

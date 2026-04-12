@@ -6,7 +6,7 @@ export default function useApi(initData) {
   const initDataRef = useRef(initData)
   initDataRef.current = initData
 
-  const baseUrl = `${window.location.protocol}//${window.location.hostname}:8765`
+  const baseUrl = import.meta.env.VITE_API_BASE || ''
 
   const get = useCallback(async (path) => {
     setLoading(true)

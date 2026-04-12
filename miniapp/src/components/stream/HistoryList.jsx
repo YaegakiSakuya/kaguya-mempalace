@@ -9,10 +9,11 @@ function formatTime(ts) {
 function HistoryItem({ item }) {
   const [expanded, setExpanded] = useState(false)
 
-  const inputTokens = item.input_tokens ?? item.prompt_tokens ?? 0
-  const outputTokens = item.output_tokens ?? item.completion_tokens ?? 0
+  const inputTokens = item.total_prompt_tokens ?? item.input_tokens ?? item.prompt_tokens ?? 0
+  const outputTokens = item.total_completion_tokens ?? item.output_tokens ?? item.completion_tokens ?? 0
   const elapsed = item.elapsed_ms
-  const tools = item.tools || item.tools_called || []
+  const rounds = item.total_rounds ?? item.rounds ?? 0
+  const tools = item.tools_called || item.tools || []
 
   return (
     <div className="card p-3" onClick={() => setExpanded(!expanded)}>
@@ -22,7 +23,7 @@ function HistoryItem({ item }) {
             {expanded ? '▾' : '▸'}
           </span>
           <span className="text-sm font-mono" style={{ color: 'var(--accent)' }}>
-            {formatTime(item.timestamp)}
+            {formatTime(item.ts || item.timestamp)}
           </span>
           <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
             {inputTokens.toLocaleString()} IN / {outputTokens.toLocaleString()} OUT

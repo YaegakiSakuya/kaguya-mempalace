@@ -15,8 +15,8 @@ export default function useSSE(initData, onDone) {
   }, [])
 
   useEffect(() => {
-    const baseUrl = `${window.location.protocol}//${window.location.hostname}:8765`
-    const fullUrl = `${baseUrl}/miniapp/stream?initData=${encodeURIComponent(initData)}`
+    const apiBase = import.meta.env.VITE_API_BASE || ''
+    const fullUrl = `${apiBase}/miniapp/stream?initData=${encodeURIComponent(initData)}`
     const es = new EventSource(fullUrl)
     esRef.current = es
 
