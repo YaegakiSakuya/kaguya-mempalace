@@ -1,7 +1,7 @@
 """线程安全的单用户 SSE 通道管理器。
 
 _run_tool_loop() 在工作线程中运行，push() 从工作线程调用。
-asyncio.Queue.put_nowait() 本身是线程安全的。
+push() 使用 call_soon_threadsafe 确保跨线程安全。
 """
 from __future__ import annotations
 
@@ -35,13 +35,21 @@ class SSEManager:
             return
         try:
             payload = json.dumps(data, ensure_ascii=False)
-            self._queue.put_nowait({"event": event, "data": payload})
+            item = {"event": event, "data": payload}
+            try:
+                loop = asyncio.get_running_loop()
+                loop.call_soon_threadsafe(self._queue.put_nowait, item)
+            except RuntimeError:
+                # 没有运行中的 event loop（已经在 event loop 线程里），直接 put
+                self._queue.put_nowait(item)
         except asyncio.QueueFull:
             logger.warning("sse_queue_full event=%s", event)
         except Exception:
             pass
 
-    async def disconnect(self) -> None:
+    async def disconnect(self, queue_ref: asyncio.Queue | None = None) -> None:
+        if queue_ref is not None and queue_ref is not self._queue:
+            return
         if self._queue is not None:
             try:
                 self._queue.put_nowait(None)

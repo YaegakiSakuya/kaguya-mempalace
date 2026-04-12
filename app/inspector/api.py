@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from app.core.config import Settings
 from app.inspector.logger import read_jsonl_tail
-from app.miniapp.auth import verify_telegram_init_data
+from app.miniapp.auth import verify_init_data_raw, verify_telegram_init_data
 from app.miniapp.sse import sse_manager
 
 logger = logging.getLogger(__name__)
@@ -443,6 +443,11 @@ def create_inspector_app(settings: Settings) -> FastAPI:
     # SSE 流（initData 通过 query param 传入，EventSource 不支持自定义 header）
     @app.get("/miniapp/stream")
     async def miniapp_sse_stream(request: Request, initData: str = Query(default="")):
+        try:
+            verify_init_data_raw(initData)
+        except ValueError as exc:
+            return JSONResponse(status_code=401, content={"detail": str(exc)})
+
         queue = await sse_manager.connect()
 
         async def event_generator():
@@ -461,7 +466,7 @@ def create_inspector_app(settings: Settings) -> FastAPI:
             except asyncio.CancelledError:
                 pass
             finally:
-                await sse_manager.disconnect()
+                await sse_manager.disconnect(queue)
 
         return StreamingResponse(
             event_generator(),
