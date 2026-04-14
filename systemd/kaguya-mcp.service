@@ -9,6 +9,7 @@ WorkingDirectory=/home/ubuntu/apps/kaguya-gateway
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=/home/ubuntu
 Environment=PATH=/home/ubuntu/apps/kaguya-gateway/.venv/bin:/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/home/ubuntu/apps/kaguya-gateway/.env
 ExecStart=/home/ubuntu/apps/kaguya-gateway/.venv/bin/python -m app.mcp.server
 Restart=on-failure
 RestartSec=5

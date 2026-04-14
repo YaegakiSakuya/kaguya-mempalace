@@ -8,7 +8,7 @@
 
 1. **Telegram Bot**：用户通过 Telegram 与 AI 对话，AI 在回复过程中主动调用 MemPalace 工具读写记忆
 2. **Inspector**：FastAPI 后台监控面板 + Telegram Mini App，提供宫殿可视化和实时监控
-3. **MCP Server**（待建）：独立进程，通过 MCP 协议暴露 MemPalace 工具，让 claude.ai 官端也能读写同一座记忆宫殿
+3. **MCP Server**：独立进程，通过 MCP 协议暴露 MemPalace 工具，让 claude.ai 官端也能读写同一座记忆宫殿
 
 三个组件共享同一套存储层：ChromaDB（向量数据库）、SQLite KG（知识图谱）、JSONL 日志、Markdown 对话记录。
 
@@ -26,7 +26,7 @@
 | Memory | MemPalace CLI + ChromaDB + SQLite KG | drawers 存向量，KG 存实体关系 |
 | Inspector | FastAPI + uvicorn | 守护线程，端口 8765，bearer token 鉴权 |
 | Mini App | React 18 + Vite + Tailwind | 挂在 Inspector 的 FastAPI 上 |
-| MCP Server | Python `mcp` 包 (FastMCP) | **待建**。独立进程，端口 8766，Streamable HTTP |
+| MCP Server | Python `mcp` 包 (FastMCP) | 独立进程，端口 8766，Streamable HTTP |
 | 部署 | systemd + nginx 反代 | HTTPS，域名已配好 |
 
 ---
@@ -43,7 +43,7 @@ cd /home/ubuntu/apps/kaguya-gateway
 sudo systemctl restart kaguya-gateway
 sudo journalctl -u kaguya-gateway -f
 
-# === MCP Server（待建后可用）===
+# === MCP Server ===
 # 前台启动
 .venv/bin/python -m app.mcp.server
 # systemd
@@ -109,7 +109,7 @@ cd miniapp && npm install && npm run build
   → append_turn() + write_turn_summary()        # 存日志
 ```
 
-### MCP Server 架构（待建）
+### MCP Server 架构
 
 ```
 claude.ai Connector 请求
@@ -139,10 +139,10 @@ claude.ai Connector 请求
 | `app/miniapp/sse.py` | SSE 管理器（线程安全） | ❌ 不改 |
 | `ops/prompts/*.md` | 外置 prompt 文件（身份核心 / 文风宪法 / 系统指令） | ❌ 绝对不改 |
 | `ops/profiles/*.md` | 外置 profile 文件（朔夜 / 辉夜的人格档案） | ❌ 绝对不改 |
-| `app/mcp/server.py` | **待建** — MCP Server 入口 | ✅ 新建 |
-| `systemd/kaguya-mcp.service` | **待建** — MCP Server systemd unit | ✅ 新建 |
-| `nginx/mcp.conf` | **待建** — nginx 反代配置参考 | ✅ 新建 |
-| `scripts/test_mcp.py` | **待建** — MCP Server 本地测试脚本 | ✅ 新建 |
+| `app/mcp/server.py` | MCP Server 入口 | ⚠️ 谨慎 |
+| `systemd/kaguya-mcp.service` | MCP Server systemd unit | ⚠️ 谨慎 |
+| `nginx/mcp.conf` | nginx 反代配置参考 | ⚠️ 谨慎 |
+| `scripts/test_mcp.py` | MCP Server 本地测试脚本 | ⚠️ 谨慎 |
 
 ---
 
@@ -170,7 +170,7 @@ kaguya-mempalace/
 │   │   ├── auth.py                    # Telegram initData 鉴权
 │   │   └── sse.py                     # SSE 管理器
 │   ├── bot/                           # 目前为空
-│   └── mcp/                           # ★ 待建 — MCP Server
+│   └── mcp/                           # MCP Server
 │       ├── __init__.py
 │       └── server.py                  # FastMCP server 入口
 ├── ops/                               # ❌ 绝对不动
@@ -191,13 +191,13 @@ kaguya-mempalace/
 │   ├── src/
 │   ├── package.json
 │   └── vite.config.js                 # base: '/miniapp/'
-├── nginx/                             # ★ 待建 — nginx 配置参考
+├── nginx/                             # nginx 配置参考
 │   └── mcp.conf
-├── scripts/                           # ★ 待建 — 实用脚本
+├── scripts/                           # 实用脚本
 │   └── test_mcp.py
 ├── systemd/
 │   ├── kaguya-gateway.service         # Telegram Bot + Inspector
-│   └── kaguya-mcp.service            # ★ 待建 — MCP Server
+│   └── kaguya-mcp.service            # MCP Server
 ├── .env                               # 环境变量（gitignored）
 ├── .env.example                       # 环境变量模板
 └── .gitignore
@@ -340,13 +340,15 @@ for name, spec in TOOLS.items():
 ```nginx
 # Kaguya MemPalace MCP Server — 放入 nginx server block 内
 
-location /mcp/ {
+location /mcp {
     # IP 白名单：仅允许 Anthropic 出站 IP
     allow 160.79.104.0/21;
     deny all;
 
     # 反代到 MCP server
-    proxy_pass http://127.0.0.1:8766/;
+    # FastMCP 默认 endpoint 是 /mcp，所以用 proxy_pass 不带末尾 /
+    # 以保留 /mcp 前缀原样传给 upstream
+    proxy_pass http://127.0.0.1:8766;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -361,7 +363,7 @@ location /mcp/ {
 }
 ```
 
-> **注意**：`proxy_pass http://127.0.0.1:8766/;`（末尾有 `/`）会去掉请求中的 `/mcp/` 前缀。如果 FastMCP 默认 endpoint 是 `/mcp/`，则改为 `proxy_pass http://127.0.0.1:8766;`（末尾无 `/`）保留前缀。具体取决于 FastMCP 的默认路径——实现时需要测试确认。
+> **注意**：FastMCP 的 Streamable HTTP 默认 endpoint 是 `/mcp`。nginx `location /mcp`（无末尾 `/`）匹配 `/mcp` 和 `/mcp/...`，`proxy_pass http://127.0.0.1:8766;`（无末尾 `/`）保留请求 URI 原样传给 upstream。
 
 ### 本地测试脚本：`scripts/test_mcp.py`
 
