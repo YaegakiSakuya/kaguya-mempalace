@@ -37,6 +37,8 @@ def _write_turn_summary(logs_dir: Path, loop_result: ToolLoopResult, turn_type: 
         "tools_succeeded": loop_result.tools_succeeded,
         "tools_failed": loop_result.tools_failed,
         "palace_writes": loop_result.palace_writes,
+        "response_preview": loop_result.reply_text,
+        "thinking_preview": loop_result.thinking_preview,
     })
 
 

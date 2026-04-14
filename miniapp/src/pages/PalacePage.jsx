@@ -21,8 +21,9 @@ export default function PalacePage() {
         get('/miniapp/palace/diary?limit=5'),
       ])
       if (ovRes) setOverview(ovRes)
-      if (wRes?.wings) setWings(wRes.wings)
-      else if (Array.isArray(wRes)) setWings(wRes)
+      if (wRes?.wings) {
+        setWings(Array.isArray(wRes.wings) ? wRes.wings : Object.keys(wRes.wings))
+      } else if (Array.isArray(wRes)) setWings(wRes)
       if (Array.isArray(dRes)) setDiary(dRes)
       else if (dRes?.entries) setDiary(dRes.entries)
       else if (dRes?.diary) setDiary(Array.isArray(dRes.diary) ? dRes.diary : [])

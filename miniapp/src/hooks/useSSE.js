@@ -28,6 +28,7 @@ export default function useSSE(initData, onDone) {
       setStatus(prev => {
         if (prev === 'idle' || prev === 'done') {
           setEvents([])
+          setStats(null)
           if (resetTimerRef.current) {
             clearTimeout(resetTimerRef.current)
             resetTimerRef.current = null
@@ -36,6 +37,18 @@ export default function useSSE(initData, onDone) {
         return 'processing'
       })
       addEvent('processing', data)
+    })
+
+    es.addEventListener('thinking', (e) => {
+      const data = JSON.parse(e.data)
+      setStatus('thinking')
+      addEvent('thinking', data)
+    })
+
+    es.addEventListener('replying', (e) => {
+      const data = JSON.parse(e.data)
+      setStatus('replying')
+      addEvent('replying', data)
     })
 
     es.addEventListener('tool_call', (e) => {
@@ -55,12 +68,6 @@ export default function useSSE(initData, onDone) {
       setStats(data)
       addEvent('done', data)
       onDoneRef.current?.()
-
-      resetTimerRef.current = setTimeout(() => {
-        setStatus('idle')
-        setEvents([])
-        resetTimerRef.current = null
-      }, 3000)
     })
 
     return () => {

@@ -266,6 +266,7 @@ def create_inspector_app(settings: Settings) -> FastAPI:
             results.append({
                 "id": ids[i],
                 "content_preview": content[:200],
+                "content_full": content,
                 "metadata": metas[i] if i < len(metas) else {},
             })
 

@@ -1,4 +1,35 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+
+function mergeStreamEvents(events) {
+  const merged = []
+
+  for (const event of events.filter(e => e.type !== 'done')) {
+    if (event.type === 'thinking' || event.type === 'replying') {
+      const last = merged[merged.length - 1]
+      const chunk = event.data?.chunk || ''
+
+      if (last && last.type === event.type) {
+        last.data = {
+          ...(last.data || {}),
+          chunk: (last.data?.chunk || '') + chunk,
+        }
+      } else {
+        merged.push({
+          ...event,
+          data: {
+            ...(event.data || {}),
+            chunk,
+          },
+        })
+      }
+      continue
+    }
+
+    merged.push(event)
+  }
+
+  return merged
+}
 
 function EventLine({ event }) {
   const { type, data } = event
@@ -8,6 +39,34 @@ function EventLine({ event }) {
       <div className="flex items-start gap-2 py-1">
         <span>⏳</span>
         <span style={{ color: 'var(--text-muted)' }}>{data.message || data.step}</span>
+      </div>
+    )
+  }
+
+  if (type === 'thinking') {
+    return (
+      <div className="py-1">
+        <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>思考中</div>
+        <div
+          className="text-sm"
+          style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}
+        >
+          {data.chunk}
+        </div>
+      </div>
+    )
+  }
+
+  if (type === 'replying') {
+    return (
+      <div className="py-1">
+        <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>回复生成中</div>
+        <div
+          className="text-sm"
+          style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}
+        >
+          {data.chunk}
+        </div>
       </div>
     )
   }
@@ -49,6 +108,11 @@ function EventLine({ event }) {
 }
 
 function StatCard({ stats }) {
+  const palaceWrites = typeof stats.palace_writes === 'object'
+    ? JSON.stringify(stats.palace_writes)
+    : stats.palace_writes
+  const toolCount = Array.isArray(stats.tools) ? stats.tools.length : (stats.tools ? 1 : 0)
+
   return (
     <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
       <div className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
@@ -69,7 +133,7 @@ function StatCard({ stats }) {
         </div>
         <div>
           <span style={{ color: 'var(--text-muted)' }}>工具: </span>
-          <span className="font-mono">{stats.rounds ?? 0}次</span>
+          <span className="font-mono">{toolCount}次</span>
         </div>
         <div>
           <span style={{ color: 'var(--text-muted)' }}>耗时: </span>
@@ -77,10 +141,10 @@ function StatCard({ stats }) {
             {stats.elapsed_ms != null ? `${(stats.elapsed_ms / 1000).toFixed(1)}s` : '-'}
           </span>
         </div>
-        {stats.palace_writes && (
+        {palaceWrites && (
           <div className="col-span-2">
             <span style={{ color: 'var(--text-muted)' }}>宫殿写入: </span>
-            <span className="font-mono text-sm">{stats.palace_writes}</span>
+            <span className="font-mono text-sm">{palaceWrites}</span>
           </div>
         )}
       </div>
@@ -90,12 +154,13 @@ function StatCard({ stats }) {
 
 export default function LiveProcess({ status, events, stats, connected }) {
   const scrollRef = useRef(null)
+  const mergedEvents = useMemo(() => mergeStreamEvents(events), [events])
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [events])
+  }, [mergedEvents])
 
   if (status === 'idle') {
     return (
@@ -125,7 +190,7 @@ export default function LiveProcess({ status, events, stats, connected }) {
         />
       </div>
       <div ref={scrollRef} className="max-h-64 overflow-y-auto">
-        {events.filter(e => e.type !== 'done').map((event, i) => (
+        {mergedEvents.map((event, i) => (
           <EventLine key={i} event={event} />
         ))}
       </div>

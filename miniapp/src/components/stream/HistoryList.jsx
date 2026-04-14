@@ -14,6 +14,12 @@ function HistoryItem({ item }) {
   const elapsed = item.elapsed_ms
   const rounds = item.total_rounds ?? item.rounds ?? 0
   const tools = item.tools_called || item.tools || []
+  const toolCount = Array.isArray(tools) ? tools.length : (tools ? 1 : 0)
+  const palaceWrites = typeof item.palace_writes === 'object'
+    ? JSON.stringify(item.palace_writes)
+    : item.palace_writes
+  const thinkingPreview = item.thinking_preview || ''
+  const responsePreview = item.response_preview || ''
 
   return (
     <div className="card p-3" onClick={() => setExpanded(!expanded)}>
@@ -29,38 +35,68 @@ function HistoryItem({ item }) {
             {inputTokens.toLocaleString()} IN / {outputTokens.toLocaleString()} OUT
           </span>
         </div>
-        {elapsed != null && (
+        <div className="flex items-center gap-3">
           <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
-            {(elapsed / 1000).toFixed(1)}s
+            tools:{toolCount}
           </span>
-        )}
+          {elapsed != null && (
+            <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
+              {(elapsed / 1000).toFixed(1)}s
+            </span>
+          )}
+        </div>
       </div>
 
       {expanded && (
         <div className="mt-2 pt-2 text-sm" style={{ borderTop: '1px solid var(--border)' }}>
-          {tools.length > 0 && (
+          {toolCount > 0 && (
             <div className="mb-2">
               <span style={{ color: 'var(--text-muted)' }}>工具: </span>
               <span className="font-mono text-xs">
-                {Array.isArray(tools) ? tools.join(', ') : tools}
+                {Array.isArray(tools) ? tools.join(', ') : String(tools)}
               </span>
             </div>
           )}
-          {item.palace_writes && (
+
+          {rounds != null && (
+            <div className="mb-2">
+              <span style={{ color: 'var(--text-muted)' }}>轮次: </span>
+              <span className="font-mono text-xs">{rounds}</span>
+            </div>
+          )}
+
+          {palaceWrites && (
             <div className="mb-2">
               <span style={{ color: 'var(--text-muted)' }}>宫殿写入: </span>
-              <span className="font-mono text-xs">{item.palace_writes}</span>
+              <span className="font-mono text-xs">{palaceWrites}</span>
             </div>
           )}
-          {item.response_preview && (
-            <div
-              className="text-xs leading-relaxed mt-1"
-              style={{ color: 'var(--text-muted)' }}
-            >
-              {item.response_preview}
+
+          {thinkingPreview && (
+            <div className="mb-3">
+              <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>思维链</div>
+              <div
+                className="text-xs leading-relaxed"
+                style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}
+              >
+                {thinkingPreview}
+              </div>
             </div>
           )}
-          {!tools.length && !item.palace_writes && !item.response_preview && (
+
+          {responsePreview && (
+            <div className="mb-1">
+              <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>回复</div>
+              <div
+                className="text-sm leading-relaxed"
+                style={{ color: 'var(--text)', whiteSpace: 'pre-wrap' }}
+              >
+                {responsePreview}
+              </div>
+            </div>
+          )}
+
+          {!toolCount && !palaceWrites && !thinkingPreview && !responsePreview && (
             <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
               无详细信息
             </div>

@@ -17,9 +17,13 @@ export default function StreamPage({ sse }) {
   // Refresh history when SSE receives a done event
   const { status, events, stats, connected } = sse
   useEffect(() => {
-    if (status === 'done') {
+    if (status !== 'done') return
+
+    const timer = setTimeout(() => {
       fetchHistory()
-    }
+    }, 1200)
+
+    return () => clearTimeout(timer)
   }, [status, fetchHistory])
 
   useEffect(() => {

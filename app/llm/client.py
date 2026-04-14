@@ -29,6 +29,7 @@ _PALACE_WRITE_TOOLS = {
 @dataclass
 class ToolLoopResult:
     reply_text: str
+    thinking_preview: str = ""
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
     total_rounds: int = 0
@@ -276,6 +277,27 @@ def _extract_text(response) -> str:
     return ""
 
 
+def _delta_reasoning_text(delta) -> str:
+    value = getattr(delta, "reasoning_content", None)
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _delta_content_text(delta) -> str:
+    value = getattr(delta, "content", None)
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            text = getattr(item, "text", None)
+            if text:
+                parts.append(text)
+        return "".join(parts)
+    return ""
+
+
 def _serialize_tool_calls(tool_calls) -> list[dict]:
     serialized: list[dict] = []
     for tool_call in tool_calls:
@@ -290,6 +312,110 @@ def _serialize_tool_calls(tool_calls) -> list[dict]:
             }
         )
     return serialized
+
+
+def _merge_tool_call_delta(acc: list[dict], delta_tool_calls) -> None:
+    for delta in (delta_tool_calls or []):
+        index = getattr(delta, "index", 0) or 0
+        while len(acc) <= index:
+            acc.append({
+                "id": "",
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            })
+
+        target = acc[index]
+        delta_id = getattr(delta, "id", None)
+        if delta_id:
+            target["id"] = delta_id
+
+        delta_function = getattr(delta, "function", None)
+        if delta_function:
+            delta_name = getattr(delta_function, "name", None)
+            if delta_name:
+                target["function"]["name"] += delta_name
+
+            delta_args = getattr(delta_function, "arguments", None)
+            if delta_args:
+                target["function"]["arguments"] += delta_args
+
+
+def _normalize_tool_calls(tool_calls: list[dict]) -> list[dict]:
+    normalized: list[dict] = []
+    for idx, item in enumerate(tool_calls):
+        fn = item.get("function", {}) if isinstance(item, dict) else {}
+        normalized.append({
+            "id": item.get("id") or f"stream_tool_call_{idx}",
+            "type": "function",
+            "function": {
+                "name": fn.get("name", ""),
+                "arguments": fn.get("arguments", "") or "{}",
+            },
+        })
+    return normalized
+
+
+def _stream_chat_completion_round(
+    client: OpenAI,
+    settings: Settings,
+    messages: list[dict],
+    *,
+    on_thinking_chunk=None,
+    on_reply_chunk=None,
+):
+    response_stream = client.chat.completions.create(
+        model=settings.openrouter_model,
+        messages=messages,
+        tools=OPENAI_TOOLS,
+        tool_choice="auto",
+        stream=True,
+        stream_options={"include_usage": True},
+        extra_body={
+            "thinking": {"type": "enabled", "clear_thinking": False}
+        },
+    )
+
+    reasoning_chunks: list[str] = []
+    reply_chunks: list[str] = []
+    streamed_tool_calls: list[dict] = []
+    usage = None
+
+    for chunk in response_stream:
+        if getattr(chunk, "usage", None):
+            usage = chunk.usage
+
+        for choice in (getattr(chunk, "choices", None) or []):
+            delta = getattr(choice, "delta", None)
+            if not delta:
+                continue
+
+            reasoning_piece = _delta_reasoning_text(delta)
+            if reasoning_piece:
+                reasoning_chunks.append(reasoning_piece)
+                if on_thinking_chunk is not None:
+                    on_thinking_chunk(reasoning_piece)
+
+            content_piece = _delta_content_text(delta)
+            if content_piece:
+                reply_chunks.append(content_piece)
+                if on_reply_chunk is not None:
+                    on_reply_chunk(content_piece)
+
+            delta_tool_calls = getattr(delta, "tool_calls", None) or []
+            if delta_tool_calls:
+                _merge_tool_call_delta(streamed_tool_calls, delta_tool_calls)
+
+    tool_calls = [
+        item for item in streamed_tool_calls
+        if item.get("function", {}).get("name")
+    ]
+
+    return (
+        "".join(reasoning_chunks),
+        "".join(reply_chunks).strip(),
+        _normalize_tool_calls(tool_calls),
+        usage,
+    )
 
 
 def create_client(settings: Settings) -> OpenAI:
@@ -324,20 +450,30 @@ def _run_tool_loop(
         })
 
     for round_index in range(max_tool_rounds):
-        response = client.chat.completions.create(
-            model=settings.openrouter_model,
+        if sse_manager.has_active_connection():
+            sse_manager.push("processing", {
+                "step": "thinking",
+                "message": f"第 {round_index + 1} 轮思考中...",
+            })
+
+        reasoning_text, streamed_reply, tool_calls, usage = _stream_chat_completion_round(
+            client=client,
+            settings=settings,
             messages=messages,
-            tools=OPENAI_TOOLS,
-            tool_choice="auto",
-            extra_body={
-                "provider": {
-                    "require_parameters": True
-                }
-            },
+            on_thinking_chunk=(
+                (lambda chunk: sse_manager.push("thinking", {"chunk": chunk}))
+                if sse_manager.has_active_connection() else None
+            ),
+            on_reply_chunk=(
+                (lambda chunk: sse_manager.push("replying", {"chunk": chunk}))
+                if sse_manager.has_active_connection() else None
+            ),
         )
 
+        if reasoning_text:
+            result.thinking_preview = (result.thinking_preview or "") + reasoning_text
+
         # --- Token usage logging ---
-        usage = getattr(response, "usage", None)
         if usage:
             prompt_tok = getattr(usage, "prompt_tokens", 0) or 0
             completion_tok = getattr(usage, "completion_tokens", 0) or 0
@@ -354,26 +490,22 @@ def _run_tool_loop(
                 "chat_id": chat_id,
             })
 
-        choice = response.choices[0]
-        message = choice.message
-        tool_calls = getattr(message, "tool_calls", None) or []
-
         if tool_calls:
             result.total_rounds = round_index + 1
-            tool_names = [tool_call.function.name for tool_call in tool_calls]
+            tool_names = [tool_call.get("function", {}).get("name", "unknown") for tool_call in tool_calls]
             logger.info("llm tool round=%s tool_calls=%s", round_index + 1, tool_names)
 
             messages.append(
                 {
                     "role": "assistant",
-                    "content": message.content or "",
-                    "tool_calls": _serialize_tool_calls(tool_calls),
+                    "content": streamed_reply,
+                    "tool_calls": tool_calls,
                 }
             )
 
             for tool_call in tool_calls:
-                tool_name = tool_call.function.name
-                raw_args = tool_call.function.arguments
+                tool_name = tool_call.get("function", {}).get("name", "")
+                raw_args = tool_call.get("function", {}).get("arguments", "{}")
                 try:
                     args_dict = json.loads(raw_args) if raw_args else {}
                 except json.JSONDecodeError:
@@ -445,7 +577,7 @@ def _run_tool_loop(
                 messages.append(
                     {
                         "role": "tool",
-                        "tool_call_id": tool_call.id,
+                        "tool_call_id": tool_call.get("id", ""),
                         "content": tool_result or "",
                     }
                 )
@@ -453,7 +585,7 @@ def _run_tool_loop(
             continue
 
         result.total_rounds = round_index + 1
-        reply = _extract_text(response)
+        reply = streamed_reply
         if not reply:
             raise RuntimeError("LLM returned empty content")
 

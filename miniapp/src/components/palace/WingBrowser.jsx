@@ -3,34 +3,45 @@ import useApi from '../../hooks/useApi'
 import useTelegram from '../../hooks/useTelegram'
 
 function DrawerItem({ drawer }) {
+  const [expanded, setExpanded] = useState(false)
   const preview = drawer.content_preview
     ? drawer.content_preview.slice(0, 200)
     : '(empty)'
+  const full = drawer.content_full || drawer.content_preview || '(empty)'
   const type = drawer.metadata?.type
   const importance = drawer.metadata?.importance
 
   return (
     <div
-      className="px-3 py-2 rounded-lg"
+      className="px-3 py-2 rounded-lg cursor-pointer"
       style={{ background: 'rgba(255,255,255,0.3)' }}
+      onClick={() => setExpanded(!expanded)}
     >
-      <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5 }}>
-        {preview}
+      <div
+        style={{
+          color: 'var(--text-muted)',
+          fontSize: '0.8rem',
+          lineHeight: 1.5,
+          whiteSpace: 'pre-wrap',
+        }}
+      >
+        {expanded ? full : preview}
       </div>
-      {(type || importance) && (
-        <div className="flex gap-2 mt-1">
-          {type && (
-            <span className="text-xs font-mono" style={{ color: 'var(--accent-dim)' }}>
-              {type}
-            </span>
-          )}
-          {importance && (
-            <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
-              imp:{importance}
-            </span>
-          )}
-        </div>
-      )}
+      <div className="flex items-center gap-2 mt-1">
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {expanded ? '▾ 收起全文' : '▸ 查看全文'}
+        </span>
+        {type && (
+          <span className="text-xs font-mono" style={{ color: 'var(--accent-dim)' }}>
+            {type}
+          </span>
+        )}
+        {importance && (
+          <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
+            imp:{importance}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -53,7 +64,7 @@ function RoomItem({ wing, room }) {
         `/miniapp/palace/drawers?wing=${encodeURIComponent(wing)}&room=${encodeURIComponent(room)}&limit=10`
       )
       if (data?.drawers) {
-        setDrawers(data.drawers)
+        setDrawers(Array.isArray(data.drawers) ? data.drawers : Object.values(data.drawers))
         setLoaded(true)
       } else if (Array.isArray(data)) {
         setDrawers(data)
@@ -69,7 +80,7 @@ function RoomItem({ wing, room }) {
         onClick={handleClick}
       >
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {expanded ? '\u25BE' : '\u25B8'}
+          {expanded ? '▾' : '▸'}
         </span>
         <span className="text-sm" style={{ color: 'var(--text)' }}>
           {room}
@@ -105,7 +116,7 @@ function WingItem({ wing, isOpen, onToggle }) {
         `/miniapp/palace/rooms?wing=${encodeURIComponent(wing)}`
       )
       if (data?.rooms) {
-        setRooms(data.rooms)
+        setRooms(Array.isArray(data.rooms) ? data.rooms : Object.keys(data.rooms))
         setLoaded(true)
       } else if (Array.isArray(data)) {
         setRooms(data)
@@ -121,7 +132,7 @@ function WingItem({ wing, isOpen, onToggle }) {
         onClick={handleClick}
       >
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {isOpen ? '\u25BE' : '\u25B8'}
+          {isOpen ? '▾' : '▸'}
         </span>
         <span className="text-sm font-medium" style={{ color: 'var(--accent)' }}>
           {displayName}
