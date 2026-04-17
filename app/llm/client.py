@@ -369,8 +369,10 @@ def _stream_chat_completion_round(
     on_thinking_chunk=None,
     on_reply_chunk=None,
 ):
-    # 智谱 GLM 独家扩展参数，非智谱 provider 不传
-    base_url, _, _ = runtime_config.get_active_client_config()
+    # 智谱 GLM 独家扩展参数，非智谱 provider 不传。
+    # 从 client 自身读取 base_url，与 _run_tool_loop 的快照保持一致，
+    # 避免 mid-loop 切换 provider 时与实际请求端点分叉。
+    client_base_url = str(getattr(client, "base_url", "") or "")
     create_kwargs = dict(
         model=model,
         messages=messages,
@@ -379,7 +381,7 @@ def _stream_chat_completion_round(
         stream=True,
         stream_options={"include_usage": True},
     )
-    if "bigmodel.cn" in (base_url or "").lower():
+    if "bigmodel.cn" in client_base_url.lower():
         create_kwargs["extra_body"] = {
             "thinking": {"type": "enabled", "clear_thinking": False}
         }
