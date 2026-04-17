@@ -289,12 +289,12 @@ function StatSummary({ stats }) {
 }
 
 export default function LiveProcess({ status, events, stats, connected }) {
-  const scrollRef = useRef(null)
+  const bottomRef = useRef(null)
   const mergedEvents = useMemo(() => mergeStreamEvents(events), [events])
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
   }, [mergedEvents])
 
@@ -331,29 +331,28 @@ export default function LiveProcess({ status, events, stats, connected }) {
 
   return (
     <div style={{ padding: '12px 4px 24px 4px', minHeight: '200px' }}>
-      <div ref={scrollRef}>
-        <div style={{ position: 'relative', paddingLeft: '16px' }}>
-          <div
-            style={{
-              position: 'absolute',
-              left: '4px',
-              top: '6px',
-              bottom: '6px',
-              width: '1px',
-              background: 'var(--border)',
-            }}
-          />
-          {mergedEvents.map((event, i) => (
-            <TimelineEvent key={i}>
-              <EventContent event={event} />
-            </TimelineEvent>
-          ))}
-          {status === 'done' && stats && (
-            <TimelineEvent>
-              <StatSummary stats={stats} />
-            </TimelineEvent>
-          )}
-        </div>
+      <div style={{ position: 'relative', paddingLeft: '16px' }}>
+        <div
+          style={{
+            position: 'absolute',
+            left: '4px',
+            top: '6px',
+            bottom: '6px',
+            width: '1px',
+            background: 'var(--border)',
+          }}
+        />
+        {mergedEvents.map((event, i) => (
+          <TimelineEvent key={i}>
+            <EventContent event={event} />
+          </TimelineEvent>
+        ))}
+        {status === 'done' && stats && (
+          <TimelineEvent>
+            <StatSummary stats={stats} />
+          </TimelineEvent>
+        )}
+        <div ref={bottomRef} />
       </div>
     </div>
   )

@@ -260,6 +260,7 @@ export default function HistoryList({ items, onRefresh, loading }) {
       <button
         onClick={(e) => { e.stopPropagation(); onRefresh() }}
         disabled={loading}
+        aria-label="refresh history"
         style={{
           position: 'absolute',
           top: 0,

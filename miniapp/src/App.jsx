@@ -78,6 +78,8 @@ function TabBar({ tab, onTabChange }) {
           <button
             key={t}
             onClick={() => onTabChange(t)}
+            aria-label={t}
+            aria-pressed={isActive}
             style={{
               position: 'relative',
               flex: 1,
