@@ -524,6 +524,9 @@ def create_inspector_app(settings: Settings) -> FastAPI:
     async def miniapp_palace_kg():
         return await kg_stats()
 
+    from app.miniapp.config_routes import build_config_router
+    app.include_router(build_config_router(settings))
+
     return app
 
 

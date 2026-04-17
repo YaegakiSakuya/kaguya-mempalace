@@ -9,6 +9,7 @@ from typing import List, Tuple
 
 from openai import OpenAI
 
+from app.core import runtime_config
 from app.core.config import Settings
 from app.inspector.logger import append_jsonl, summarize_arguments, _now_iso
 from app.llm.ops_tools import (
@@ -367,8 +368,9 @@ def _stream_chat_completion_round(
     on_thinking_chunk=None,
     on_reply_chunk=None,
 ):
+    _, _, active_model = runtime_config.get_active_client_config()
     response_stream = client.chat.completions.create(
-        model=settings.openrouter_model,
+        model=active_model,
         messages=messages,
         tools=tools,
         tool_choice="auto",
@@ -423,9 +425,16 @@ def _stream_chat_completion_round(
 
 
 def create_client(settings: Settings) -> OpenAI:
+    """Build an OpenAI-compatible client using the runtime-config overlay.
+
+    The ``settings`` parameter is kept for signature stability but the live
+    ``base_url`` / ``api_key`` come from :mod:`app.core.runtime_config`, which
+    falls back to ``Settings`` values on first run.
+    """
+    base_url, api_key, _ = runtime_config.get_active_client_config()
     return OpenAI(
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
+        api_key=api_key,
+        base_url=base_url,
         timeout=60.0,
         max_retries=2,
     )
@@ -486,11 +495,15 @@ def _run_tool_loop(
             completion_tok = getattr(usage, "completion_tokens", 0) or 0
             result.total_prompt_tokens += prompt_tok
             result.total_completion_tokens += completion_tok
+            try:
+                _, _, logged_model = runtime_config.get_active_client_config()
+            except Exception:
+                logged_model = settings.openrouter_model
             append_jsonl(logs_dir / "token_usage.jsonl", {
                 "ts": _now_iso(),
                 "turn_type": turn_type,
                 "round": round_index + 1,
-                "model": settings.openrouter_model,
+                "model": logged_model,
                 "prompt_tokens": prompt_tok,
                 "completion_tokens": completion_tok,
                 "total_tokens": prompt_tok + completion_tok,
