@@ -55,12 +55,19 @@ function mergeStreamEvents(events) {
 
 function WaitingDots() {
   return (
-    <span className="dots font-mono" style={{ color: 'var(--text-muted)' }}>
+    <span className="dots" style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
       <span>·</span>
       <span>·</span>
       <span>·</span>
     </span>
   )
+}
+
+const SYSTEM_TEXT_STYLE = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: '12px',
+  color: 'var(--text-muted)',
+  lineHeight: 1.5,
 }
 
 function EventContent({ event }) {
@@ -77,7 +84,7 @@ function EventContent({ event }) {
         }}
       >
         <WaitingDots />
-        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+        <span style={SYSTEM_TEXT_STYLE}>
           {translateProcessingMessage(data)}
         </span>
       </div>
@@ -87,10 +94,24 @@ function EventContent({ event }) {
   if (type === 'thinking') {
     return (
       <div>
-        <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>thinking</div>
         <div
-          className="text-sm"
-          style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            color: 'var(--accent)',
+            marginBottom: '4px',
+          }}
+        >
+          thinking
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-serif)',
+            fontSize: '13px',
+            color: 'var(--text-muted)',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.6,
+          }}
         >
           {data.chunk}
         </div>
@@ -101,10 +122,24 @@ function EventContent({ event }) {
   if (type === 'replying') {
     return (
       <div>
-        <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>replying</div>
         <div
-          className="text-sm"
-          style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            color: 'var(--accent)',
+            marginBottom: '4px',
+          }}
+        >
+          replying
+        </div>
+        <div
+          style={{
+            fontFamily: 'var(--font-serif)',
+            fontSize: '13px',
+            color: 'var(--text)',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.6,
+          }}
         >
           {data.chunk}
         </div>
@@ -122,10 +157,10 @@ function EventContent({ event }) {
           width: '100%',
         }}
       >
-        <span className="font-mono text-sm" style={{ color: 'var(--accent)' }}>
+        <span style={{ ...SYSTEM_TEXT_STYLE, color: 'var(--accent)' }}>
           {data.tool}
         </span>
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        <span style={{ ...SYSTEM_TEXT_STYLE, fontSize: '11px', color: 'var(--text-secondary)' }}>
           (round {data.round})
         </span>
       </div>
@@ -144,8 +179,10 @@ function EventContent({ event }) {
         }}
       >
         <span
-          className="text-sm"
-          style={{ color: success ? 'var(--success)' : 'var(--fail)' }}
+          style={{
+            ...SYSTEM_TEXT_STYLE,
+            color: success ? 'var(--success)' : 'var(--fail)',
+          }}
         >
           {success ? 'done' : 'failed'}
         </span>
@@ -168,7 +205,7 @@ function EventContent({ event }) {
   return null
 }
 
-function TimelineEvent({ event }) {
+function TimelineEvent({ children }) {
   return (
     <div
       style={{
@@ -189,12 +226,12 @@ function TimelineEvent({ event }) {
           border: '1.5px solid var(--bg)',
         }}
       />
-      <EventContent event={event} />
+      {children}
     </div>
   )
 }
 
-function StatCard({ stats }) {
+function StatSummary({ stats }) {
   const toolCount = Array.isArray(stats.tools) ? stats.tools.length : (stats.tools ? 1 : 0)
   const hasPalaceWrites =
     stats.palace_writes &&
@@ -202,11 +239,10 @@ function StatCard({ stats }) {
     Object.values(stats.palace_writes).some(v => v)
 
   return (
-    <div className="mt-3">
-      <div style={{ height: '1px', background: 'var(--border)', margin: '8px 0' }} />
+    <div>
       <div
         style={{
-          fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+          fontFamily: 'var(--font-mono)',
           fontSize: '11px',
           color: 'var(--text-secondary)',
           display: 'flex',
@@ -233,7 +269,7 @@ function StatCard({ stats }) {
       {Array.isArray(stats.tools) && stats.tools.length > 0 && (
         <div
           style={{
-            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+            fontFamily: 'var(--font-mono)',
             fontSize: '11px',
             color: 'var(--text-secondary)',
             marginTop: '4px',
@@ -252,69 +288,72 @@ function StatCard({ stats }) {
   )
 }
 
-function StatusDot({ connected }) {
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        width: '4px',
-        height: '4px',
-        borderRadius: '1px',
-        background: connected ? 'var(--success)' : 'var(--fail)',
-      }}
-    />
-  )
-}
-
 export default function LiveProcess({ status, events, stats, connected }) {
-  const scrollRef = useRef(null)
+  const bottomRef = useRef(null)
   const mergedEvents = useMemo(() => mergeStreamEvents(events), [events])
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
   }, [mergedEvents])
 
   if (status === 'idle') {
     return (
-      <div className="card p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            waiting for messages...
-          </p>
-          <StatusDot connected={connected} />
+      <div style={{ padding: '12px 4px 24px 4px', minHeight: '200px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '180px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
+            opacity: 0.5,
+          }}
+        >
+          waiting
+          <span
+            style={{
+              display: 'inline-block',
+              width: '4px',
+              height: '4px',
+              borderRadius: '1px',
+              background: connected ? 'var(--success)' : 'var(--text-secondary)',
+              marginLeft: '8px',
+            }}
+          />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          live
-        </span>
-        <StatusDot connected={connected} />
+    <div style={{ padding: '12px 4px 24px 4px', minHeight: '200px' }}>
+      <div style={{ position: 'relative', paddingLeft: '16px' }}>
+        <div
+          style={{
+            position: 'absolute',
+            left: '4px',
+            top: '6px',
+            bottom: '6px',
+            width: '1px',
+            background: 'var(--border)',
+          }}
+        />
+        {mergedEvents.map((event, i) => (
+          <TimelineEvent key={i}>
+            <EventContent event={event} />
+          </TimelineEvent>
+        ))}
+        {status === 'done' && stats && (
+          <TimelineEvent>
+            <StatSummary stats={stats} />
+          </TimelineEvent>
+        )}
+        <div ref={bottomRef} />
       </div>
-      <div ref={scrollRef} className="max-h-64 overflow-y-auto">
-        <div style={{ position: 'relative', paddingLeft: '16px' }}>
-          <div
-            style={{
-              position: 'absolute',
-              left: '4px',
-              top: '6px',
-              bottom: '6px',
-              width: '1px',
-              background: 'var(--border)',
-            }}
-          />
-          {mergedEvents.map((event, i) => (
-            <TimelineEvent key={i} event={event} />
-          ))}
-        </div>
-      </div>
-      {status === 'done' && stats && <StatCard stats={stats} />}
     </div>
   )
 }

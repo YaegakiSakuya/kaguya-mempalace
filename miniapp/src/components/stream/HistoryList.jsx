@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { IconRefresh } from '../icons'
 
 function stripMempalacePrefix(name) {
   if (typeof name !== 'string') return String(name ?? '')
@@ -58,21 +59,18 @@ function HistoryItem({ item, isLast }) {
   const thinkingNeedsCollapse = (thinkingPreview || '').length > THINKING_COLLAPSE_THRESHOLD
   const thinkingCollapsed = thinkingNeedsCollapse && !thinkingExpanded
   const responsePreview = item.response_preview || ''
-  const totalTokens = inputTokens + outputTokens
-  const summary = item.turn_type || item.summary || responsePreview || '—'
+  const rawReply = responsePreview || item.reply_text || ''
+  const normalizedReply = rawReply.replace(/\s+/g, ' ').trim()
+  const replyPreviewSummary = normalizedReply.slice(0, 80) + (normalizedReply.length > 80 ? '\u2026' : '')
 
   return (
     <div
-      onClick={() => setExpanded(!expanded)}
       style={{
         position: 'relative',
-        cursor: 'pointer',
         borderBottom: isLast ? 'none' : '1px solid',
         borderBottomColor: expanded ? 'var(--border-strong)' : 'var(--border)',
-        transition: 'background 150ms ease, border-bottom-color 200ms ease',
+        transition: 'border-bottom-color 200ms ease',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
       <div
         style={{
@@ -86,48 +84,48 @@ function HistoryItem({ item, isLast }) {
         }}
       />
       <div
+        onClick={() => setExpanded(!expanded)}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
+          cursor: 'pointer',
           padding: '12px 16px',
+          transition: 'background 150ms ease',
         }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
-        <span
-          className="font-mono"
-          style={{ fontSize: '11px', color: 'var(--text-secondary)', flexShrink: 0 }}
-        >
-          {formatTime(item.ts || item.timestamp)}
-        </span>
-        <span
+        <div
           style={{
-            flex: 1,
             fontSize: '13px',
             color: 'var(--text)',
+            lineHeight: 1.5,
+            whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            marginBottom: '4px',
           }}
         >
-          {summary}
-        </span>
-        <span
-          className="font-mono"
-          style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}
-        >
-          {toolCount}t · {totalTokens.toLocaleString()}
-        </span>
-        <span
+          {normalizedReply
+            ? replyPreviewSummary
+            : <span style={{ color: 'var(--text-secondary)' }}>no reply</span>}
+        </div>
+        <div
           style={{
-            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
             color: 'var(--text-muted)',
-            flexShrink: 0,
-            width: '14px',
-            textAlign: 'center',
           }}
         >
-          {expanded ? '\uFF0D' : '\uFF0B'}
-        </span>
+          <span>{formatTime(item.ts || item.timestamp)}</span>
+          {toolCount > 0 && (
+            <>
+              <span>{'\u00b7'}</span>
+              <span>{toolCount} {toolCount === 1 ? 'tool' : 'tools'}</span>
+            </>
+          )}
+        </div>
       </div>
 
       <div
@@ -141,9 +139,8 @@ function HistoryItem({ item, isLast }) {
         <div
           className="text-sm"
           style={{
-            padding: '0 16px 20px 16px',
+            padding: '12px 16px 20px 16px',
             borderTop: '1px solid var(--border)',
-            paddingTop: '12px',
           }}
         >
           {thinkingPreview && (
@@ -225,10 +222,18 @@ function HistoryItem({ item, isLast }) {
               }}
             >
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0 10px' }}>
-                {rounds != null && <span>{rounds} rounds</span>}
+                <span>in {inputTokens.toLocaleString()}</span>
+                <span>{'\u00b7'}</span>
+                <span>out {outputTokens.toLocaleString()}</span>
+                {rounds != null && (
+                  <>
+                    <span>{'\u00b7'}</span>
+                    <span>{rounds} rounds</span>
+                  </>
+                )}
                 {hasPalaceWrites && (
                   <>
-                    {rounds != null && <span>{'\u00b7'}</span>}
+                    <span>{'\u00b7'}</span>
                     <span>{typeof rawPalaceWrites === 'string' ? rawPalaceWrites : formatPalaceWrites(rawPalaceWrites)}</span>
                   </>
                 )}
@@ -251,31 +256,28 @@ function HistoryItem({ item, isLast }) {
 
 export default function HistoryList({ items, onRefresh, loading }) {
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          history
-        </span>
-        <button
-          onClick={(e) => { e.stopPropagation(); onRefresh() }}
-          disabled={loading}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            padding: 0,
-            fontSize: '12px',
-            fontFamily: 'inherit',
-            color: 'var(--text-muted)',
-            cursor: loading ? 'default' : 'pointer',
-            opacity: loading ? 0.5 : 1,
-            transition: 'color 150ms ease',
-          }}
-          onMouseEnter={(e) => { if (!loading) e.currentTarget.style.color = 'var(--accent)' }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)' }}
-        >
-          {loading ? '...' : 'refresh'}
-        </button>
-      </div>
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); onRefresh() }}
+        disabled={loading}
+        aria-label="refresh history"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          background: 'transparent',
+          border: 'none',
+          padding: '6px',
+          cursor: loading ? 'default' : 'pointer',
+          opacity: loading ? 0.3 : 0.6,
+          transition: 'opacity 150ms ease',
+          zIndex: 1,
+        }}
+        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = '1' }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6' }}
+      >
+        <IconRefresh color="var(--text-muted)" />
+      </button>
       {items.length === 0 ? (
         <div className="card p-5 text-center">
           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
