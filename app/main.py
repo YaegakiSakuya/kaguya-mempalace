@@ -174,7 +174,17 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         assistant_text = loop_result.reply_text
 
-        await update.message.reply_text(assistant_text)
+        segments = loop_result.reply_segments or [assistant_text]
+        for idx, segment in enumerate(segments):
+            if not segment or not segment.strip():
+                continue
+            if idx > 0:
+                await context.bot.send_chat_action(
+                    chat_id=update.effective_chat.id,
+                    action=ChatAction.TYPING,
+                )
+                await asyncio.sleep(0.4)
+            await update.message.reply_text(segment)
 
         await asyncio.to_thread(
             append_turn,

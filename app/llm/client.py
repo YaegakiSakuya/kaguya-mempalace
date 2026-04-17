@@ -29,6 +29,7 @@ _PALACE_WRITE_TOOLS = {
 @dataclass
 class ToolLoopResult:
     reply_text: str
+    reply_segments: list[str] = field(default_factory=list)
     thinking_preview: str = ""
     total_prompt_tokens: int = 0
     total_completion_tokens: int = 0
@@ -495,6 +496,9 @@ def _run_tool_loop(
             tool_names = [tool_call.get("function", {}).get("name", "unknown") for tool_call in tool_calls]
             logger.info("llm tool round=%s tool_calls=%s", round_index + 1, tool_names)
 
+            if streamed_reply and streamed_reply.strip():
+                result.reply_segments.append(streamed_reply)
+
             messages.append(
                 {
                     "role": "assistant",
@@ -585,11 +589,12 @@ def _run_tool_loop(
             continue
 
         result.total_rounds = round_index + 1
-        reply = streamed_reply
-        if not reply:
-            raise RuntimeError("LLM returned empty content")
 
-        result.reply_text = reply
+        if not streamed_reply or not streamed_reply.strip():
+            raise RuntimeError("LLM returned empty content on final round")
+
+        result.reply_segments.append(streamed_reply)
+        result.reply_text = "\n\n".join(result.reply_segments)
 
         total_elapsed = int((time.monotonic() - loop_start) * 1000)
         if sse_manager.has_active_connection():
@@ -602,7 +607,8 @@ def _run_tool_loop(
                 "tools_failed": result.tools_failed,
                 "palace_writes": result.palace_writes,
                 "elapsed_ms": total_elapsed,
-                "response_preview": reply[:200] if reply else "",
+                "response_preview": result.reply_text[:200] if result.reply_text else "",
+                "segments_count": len(result.reply_segments),
             })
 
         return result
