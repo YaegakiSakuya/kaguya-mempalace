@@ -1,30 +1,44 @@
 import { useState } from 'react'
 
-function DiaryEntry({ entry }) {
+function DiaryEntry({ entry, isLast }) {
   const [expanded, setExpanded] = useState(false)
 
   const title = entry.date || entry.title || null
   const content = entry.content || entry.text || ''
 
   return (
-    <div className="card p-3 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+    <div
+      onClick={() => setExpanded(!expanded)}
+      style={{
+        cursor: 'pointer',
+        padding: '12px 16px',
+        borderBottom: isLast ? 'none' : '1px solid var(--border)',
+        transition: 'background 150ms ease',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+    >
       {title && (
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium" style={{ color: 'var(--accent)' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '6px',
+          }}
+        >
+          <span className="font-mono" style={{ fontSize: '12px', color: 'var(--accent)' }}>
             {title}
           </span>
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            {expanded ? '\u25BE' : '\u25B8'}
+          <span
+            style={{
+              fontSize: '14px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            {expanded ? '\uFF0D' : '\uFF0B'}
           </span>
         </div>
-      )}
-      {!title && (
-        <span
-          className="text-xs float-right"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          {expanded ? '\u25BE' : '\u25B8'}
-        </span>
       )}
       <div
         className="text-sm leading-relaxed"
@@ -47,20 +61,26 @@ function DiaryEntry({ entry }) {
 export default function DiaryList({ entries }) {
   return (
     <div>
-      <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
         辉夜日记
       </span>
-      <div className="flex flex-col gap-2 mt-2">
+      <div style={{ marginTop: '8px' }}>
         {!entries || entries.length === 0 ? (
-          <div className="card p-4 text-center">
+          <div className="card p-5 text-center">
             <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
               暂无日记
             </span>
           </div>
         ) : (
-          entries.map((entry, i) => (
-            <DiaryEntry key={entry.id || i} entry={entry} />
-          ))
+          <div className="card">
+            {entries.map((entry, i) => (
+              <DiaryEntry
+                key={entry.id || i}
+                entry={entry}
+                isLast={i === entries.length - 1}
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>

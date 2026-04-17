@@ -6,73 +6,77 @@ import PalacePage from './pages/PalacePage'
 
 function ECGLine({ active }) {
   return (
-    <svg width="80" height="24" viewBox="0 0 80 24" style={{
-      opacity: active ? 0.8 : 0.4,
-      transition: 'opacity 0.5s ease',
-    }}>
-      <path
-        d="M0,12 L15,12 L20,4 L25,20 L30,8 L35,16 L40,12 L80,12"
-        fill="none"
-        stroke="var(--accent)"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeDasharray="160"
-      >
-        <animate
-          attributeName="stroke-dashoffset"
-          from="160"
-          to="0"
-          dur={active ? '1.5s' : '3s'}
-          repeatCount="indefinite"
-        />
-      </path>
-    </svg>
+    <span
+      style={{
+        display: 'inline-block',
+        width: '80px',
+        height: '0.5px',
+        minHeight: '1px',
+        background: 'var(--accent)',
+        opacity: 0.3,
+        animation: active ? 'pulse-line 3s ease-in-out infinite' : 'none',
+      }}
+    />
   )
 }
 
 function Header({ sseStatus }) {
   return (
-    <header className="px-4 pt-4 pb-2 flex items-center justify-between">
-      <h1 className="text-lg font-semibold" style={{ color: 'var(--accent)' }}>
-        Kaguya · MemPalace
-      </h1>
+    <header
+      className="px-4 pt-3 pb-2 flex items-center"
+      style={{ gap: '12px' }}
+    >
       <ECGLine active={sseStatus !== 'idle' && sseStatus !== 'done'} />
     </header>
   )
 }
 
 function TabBar({ tab, onTabChange }) {
+  const tabs = ['stream', 'palace']
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)',
-      borderRadius: '9999px',
-      padding: '4px',
-      display: 'flex',
-      margin: '0 16px 16px',
-    }}>
-      {['stream', 'palace'].map(t => (
-        <button
-          key={t}
-          onClick={() => onTabChange(t)}
-          style={{
-            flex: 1,
-            padding: '8px 0',
-            borderRadius: '9999px',
-            border: 'none',
-            background: tab === t ? 'var(--accent)' : 'transparent',
-            color: tab === t ? '#fff' : 'var(--text-muted)',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'background 0.2s ease, color 0.2s ease',
-          }}
-        >
-          {t === 'stream' ? '消息流' : '宫殿'}
-        </button>
-      ))}
+    <div
+      style={{
+        display: 'flex',
+        margin: '0 16px 16px',
+      }}
+    >
+      {tabs.map(t => {
+        const isActive = tab === t
+        return (
+          <button
+            key={t}
+            onClick={() => onTabChange(t)}
+            style={{
+              position: 'relative',
+              flex: 1,
+              padding: '10px 0',
+              background: 'transparent',
+              border: 'none',
+              color: isActive ? 'var(--text)' : 'var(--text-muted)',
+              fontSize: '14px',
+              fontWeight: 400,
+              fontFamily: 'inherit',
+              textAlign: 'center',
+              cursor: 'pointer',
+              transition: 'color 250ms ease-out',
+            }}
+          >
+            {t === 'stream' ? '消息流' : '宫殿'}
+            <span
+              style={{
+                position: 'absolute',
+                left: '50%',
+                bottom: 0,
+                transform: 'translateX(-50%)',
+                width: isActive ? '20px' : '0px',
+                height: '1px',
+                background: 'var(--accent)',
+                transition: 'all 250ms ease-out',
+              }}
+            />
+          </button>
+        )
+      })}
     </div>
   )
 }
