@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { IconRefresh } from '../icons'
+import useHaptic from '../../hooks/useHaptic'
 
 function stripMempalacePrefix(name) {
   if (typeof name !== 'string') return String(name ?? '')
@@ -41,6 +42,7 @@ function formatTime(ts) {
 const THINKING_COLLAPSE_THRESHOLD = 500
 
 function HistoryItem({ item, isLast }) {
+  const { impact } = useHaptic()
   const [expanded, setExpanded] = useState(false)
   const [thinkingExpanded, setThinkingExpanded] = useState(false)
 
@@ -84,7 +86,7 @@ function HistoryItem({ item, isLast }) {
         }}
       />
       <div
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => { impact('light'); setExpanded(!expanded) }}
         style={{
           cursor: 'pointer',
           padding: '12px 16px',
@@ -174,7 +176,7 @@ function HistoryItem({ item, isLast }) {
               </div>
               {thinkingNeedsCollapse && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); setThinkingExpanded(!thinkingExpanded) }}
+                  onClick={(e) => { e.stopPropagation(); impact('light'); setThinkingExpanded(!thinkingExpanded) }}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -255,10 +257,11 @@ function HistoryItem({ item, isLast }) {
 }
 
 export default function HistoryList({ items, onRefresh, loading }) {
+  const { impact } = useHaptic()
   return (
     <div style={{ position: 'relative' }}>
       <button
-        onClick={(e) => { e.stopPropagation(); onRefresh() }}
+        onClick={(e) => { e.stopPropagation(); impact('medium'); onRefresh() }}
         disabled={loading}
         aria-label="refresh history"
         style={{

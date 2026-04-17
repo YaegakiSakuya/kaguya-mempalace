@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import useApi from '../../hooks/useApi'
 import useTelegram from '../../hooks/useTelegram'
+import useHaptic from '../../hooks/useHaptic'
 
 function DrawerItem({ drawer, isLast }) {
+  const { impact } = useHaptic()
   const [expanded, setExpanded] = useState(false)
   const preview = drawer.content_preview
     ? drawer.content_preview.slice(0, 200)
@@ -13,7 +15,7 @@ function DrawerItem({ drawer, isLast }) {
 
   return (
     <div
-      onClick={() => setExpanded(!expanded)}
+      onClick={() => { impact('light'); setExpanded(!expanded) }}
       style={{
         cursor: 'pointer',
         padding: '10px 16px 10px 32px',
@@ -65,11 +67,13 @@ function DrawerItem({ drawer, isLast }) {
 function RoomItem({ wing, room, isLast }) {
   const { initData } = useTelegram()
   const { get } = useApi(initData)
+  const { impact } = useHaptic()
   const [expanded, setExpanded] = useState(false)
   const [drawers, setDrawers] = useState([])
   const [loaded, setLoaded] = useState(false)
 
   const handleClick = async () => {
+    impact('light')
     if (expanded) {
       setExpanded(false)
       return
@@ -150,12 +154,14 @@ function RoomItem({ wing, room, isLast }) {
 function WingItem({ wing, isOpen, onToggle, isLast }) {
   const { initData } = useTelegram()
   const { get } = useApi(initData)
+  const { impact } = useHaptic()
   const [rooms, setRooms] = useState([])
   const [loaded, setLoaded] = useState(false)
 
   const displayName = wing.replace(/^wing_/, '')
 
   const handleClick = async () => {
+    impact('light')
     onToggle()
     if (!isOpen && !loaded) {
       const data = await get(
