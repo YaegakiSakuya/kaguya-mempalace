@@ -63,21 +63,30 @@ function WaitingDots() {
   )
 }
 
-function EventLine({ event }) {
+function EventContent({ event }) {
   const { type, data } = event
 
   if (type === 'processing') {
     return (
-      <div className="flex items-start gap-2 py-1">
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: '8px',
+          width: '100%',
+        }}
+      >
         <WaitingDots />
-        <span style={{ color: 'var(--text-muted)' }}>{translateProcessingMessage(data)}</span>
+        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          {translateProcessingMessage(data)}
+        </span>
       </div>
     )
   }
 
   if (type === 'thinking') {
     return (
-      <div className="py-1">
+      <div>
         <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>thinking</div>
         <div
           className="text-sm"
@@ -91,7 +100,7 @@ function EventLine({ event }) {
 
   if (type === 'replying') {
     return (
-      <div className="py-1">
+      <div>
         <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>replying</div>
         <div
           className="text-sm"
@@ -105,17 +114,19 @@ function EventLine({ event }) {
 
   if (type === 'tool_call') {
     return (
-      <div className="flex items-start gap-2 py-1">
-        <span style={{ color: 'var(--accent)', fontSize: '8px', lineHeight: '20px' }}>
-          {'\u25CB'}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: '8px',
+          width: '100%',
+        }}
+      >
+        <span className="font-mono text-sm" style={{ color: 'var(--accent)' }}>
+          {data.tool}
         </span>
-        <span>
-          <span className="font-mono text-sm" style={{ color: 'var(--accent)' }}>
-            {data.tool}
-          </span>
-          <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>
-            (round {data.round})
-          </span>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          (round {data.round})
         </span>
       </div>
     )
@@ -124,18 +135,63 @@ function EventLine({ event }) {
   if (type === 'tool_done') {
     const success = data.success !== false
     return (
-      <div className="flex items-start gap-2 py-0.5 pl-6">
-        <span className="text-sm" style={{ color: success ? 'var(--success)' : 'var(--fail)' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: '8px',
+          width: '100%',
+        }}
+      >
+        <span
+          className="text-sm"
+          style={{ color: success ? 'var(--success)' : 'var(--fail)' }}
+        >
           {success ? 'done' : 'failed'}
-          {data.duration_ms != null && (
-            <span className="font-mono ml-1">({data.duration_ms}ms)</span>
-          )}
         </span>
+        {data.duration_ms != null && (
+          <span
+            style={{
+              marginLeft: 'auto',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {data.duration_ms}ms
+          </span>
+        )}
       </div>
     )
   }
 
   return null
+}
+
+function TimelineEvent({ event }) {
+  return (
+    <div
+      style={{
+        position: 'relative',
+        paddingBottom: '10px',
+        minHeight: '16px',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          left: '-16px',
+          top: '6px',
+          width: '7px',
+          height: '7px',
+          borderRadius: '50%',
+          background: 'var(--accent)',
+          border: '1.5px solid var(--bg)',
+        }}
+      />
+      <EventContent event={event} />
+    </div>
+  )
 }
 
 function StatCard({ stats }) {
@@ -242,9 +298,21 @@ export default function LiveProcess({ status, events, stats, connected }) {
         <StatusDot connected={connected} />
       </div>
       <div ref={scrollRef} className="max-h-64 overflow-y-auto">
-        {mergedEvents.map((event, i) => (
-          <EventLine key={i} event={event} />
-        ))}
+        <div style={{ position: 'relative', paddingLeft: '16px' }}>
+          <div
+            style={{
+              position: 'absolute',
+              left: '4px',
+              top: '6px',
+              bottom: '6px',
+              width: '1px',
+              background: 'var(--border)',
+            }}
+          />
+          {mergedEvents.map((event, i) => (
+            <TimelineEvent key={i} event={event} />
+          ))}
+        </div>
       </div>
       {status === 'done' && stats && <StatCard stats={stats} />}
     </div>

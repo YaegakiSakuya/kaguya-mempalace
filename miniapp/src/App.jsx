@@ -4,19 +4,44 @@ import useSSE from './hooks/useSSE'
 import StreamPage from './pages/StreamPage'
 import PalacePage from './pages/PalacePage'
 
-function ECGLine({ active }) {
+function MoonPhase({ active }) {
   return (
-    <span
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
       style={{
-        display: 'inline-block',
-        width: '80px',
-        height: '0.5px',
-        minHeight: '1px',
-        background: 'var(--accent)',
-        opacity: 0.3,
-        animation: active ? 'pulse-line 3s ease-in-out infinite' : 'none',
+        opacity: active ? 0.85 : 0.35,
+        transition: 'opacity 600ms ease',
       }}
-    />
+    >
+      <defs>
+        <mask id="moon-phase-mask">
+          <rect width="24" height="24" fill="black" />
+          <circle cx="12" cy="12" r="10" fill="white" />
+        </mask>
+      </defs>
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        fill="none"
+        stroke="var(--border-strong)"
+        strokeWidth="0.75"
+      />
+      <ellipse
+        cx="12"
+        cy="12"
+        rx="10"
+        ry="10"
+        fill="var(--accent)"
+        mask="url(#moon-phase-mask)"
+        style={{
+          animation: active ? 'moon-phase 8s ease-in-out infinite' : 'none',
+          transformOrigin: '12px 12px',
+        }}
+      />
+    </svg>
   )
 }
 
@@ -26,7 +51,7 @@ function Header({ sseStatus }) {
       className="px-4 pt-3 pb-2 flex items-center"
       style={{ gap: '12px' }}
     >
-      <ECGLine active={sseStatus !== 'idle' && sseStatus !== 'done'} />
+      <MoonPhase active={sseStatus !== 'idle' && sseStatus !== 'done'} />
     </header>
   )
 }
