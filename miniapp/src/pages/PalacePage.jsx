@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import useTelegram from '../hooks/useTelegram'
 import useApi from '../hooks/useApi'
+import LLMConfigCard from '../components/palace/LLMConfigCard'
 import Overview from '../components/palace/Overview'
 import WingBrowser from '../components/palace/WingBrowser'
 import DiaryList from '../components/palace/DiaryList'
@@ -34,6 +35,7 @@ export default function PalacePage() {
 
   return (
     <div className="px-4 pb-6 space-y-6">
+      <LLMConfigCard />
       <Overview data={overview} />
       <WingBrowser wings={wings} />
       <DiaryList entries={diary} />
