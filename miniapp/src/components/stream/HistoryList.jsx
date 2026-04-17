@@ -34,7 +34,7 @@ function HistoryItem({ item, isLast }) {
   const hasPalaceWrites = rawPalaceWrites && (
     typeof rawPalaceWrites === 'string'
       ? rawPalaceWrites.trim() !== ''
-      : typeof rawPalaceWrites === 'object' && Object.keys(rawPalaceWrites).length > 0
+      : typeof rawPalaceWrites === 'object' && Object.values(rawPalaceWrites).some(v => v)
   )
   const thinkingPreview = item.thinking_text || item.thinking_preview || null
   const thinkingNeedsCollapse = (thinkingPreview || '').length > THINKING_COLLAPSE_THRESHOLD

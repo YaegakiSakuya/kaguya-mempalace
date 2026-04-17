@@ -143,7 +143,7 @@ function StatCard({ stats }) {
   const hasPalaceWrites =
     stats.palace_writes &&
     typeof stats.palace_writes === 'object' &&
-    Object.keys(stats.palace_writes).length > 0
+    Object.values(stats.palace_writes).some(v => v)
 
   return (
     <div className="mt-3">
