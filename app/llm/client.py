@@ -11,6 +11,11 @@ from openai import OpenAI
 
 from app.core.config import Settings
 from app.inspector.logger import append_jsonl, summarize_arguments, _now_iso
+from app.llm.ops_tools import (
+    build_ops_openai_tools,
+    execute_ops_tool,
+    OPS_TOOL_NAMES,
+)
 from app.memory.tools import OPENAI_TOOLS, execute_tool
 from app.miniapp.sse import sse_manager
 
@@ -47,8 +52,6 @@ OPS_DIR = Path("/home/ubuntu/apps/kaguya-gateway/ops")
 CORE_IDENTITY_FILE = OPS_DIR / "prompts" / "core_identity.md"
 WRITING_CONSTITUTION_FILE = OPS_DIR / "prompts" / "writing_constitution.md"
 SYSTEM_PROMPT_FILE = OPS_DIR / "prompts" / "system.md"
-SAKUYA_PROFILE_FILE = OPS_DIR / "profiles" / "sakuya.md"
-KAGUYA_PROFILE_FILE = OPS_DIR / "profiles" / "kaguya.md"
 
 
 def _clean_text(value: str) -> str:
@@ -69,16 +72,12 @@ def _load_external_prompt_material() -> dict[str, str]:
         "core": _read_optional_text(CORE_IDENTITY_FILE),
         "writing": _read_optional_text(WRITING_CONSTITUTION_FILE),
         "system": _read_optional_text(SYSTEM_PROMPT_FILE),
-        "sakuya": _read_optional_text(SAKUYA_PROFILE_FILE),
-        "kaguya": _read_optional_text(KAGUYA_PROFILE_FILE),
     }
     logger.info(
-        "external prompt material loaded core_chars=%s writing_chars=%s system_chars=%s sakuya_chars=%s kaguya_chars=%s",
+        "external prompt material loaded core_chars=%s writing_chars=%s system_chars=%s",
         len(docs["core"]),
         len(docs["writing"]),
         len(docs["system"]),
-        len(docs["sakuya"]),
-        len(docs["kaguya"]),
     )
     return docs
 
@@ -119,21 +118,24 @@ def _base_system_sections(settings: Settings, wakeup_text: str) -> list[str]:
             ]
         )
 
-    if docs["sakuya"]:
-        sections.extend(
-            [
-                "=== HIGH PRIORITY PROFILE: SAKUYA ===",
-                docs["sakuya"],
-            ]
-        )
-
-    if docs["kaguya"]:
-        sections.extend(
-            [
-                "=== HIGH PRIORITY PROFILE: KAGUYA ===",
-                docs["kaguya"],
-            ]
-        )
+    sections.extend(
+        [
+            "=== PROFILE RETRIEVAL TOOLS ===",
+            (
+                "Two additional tools give you on-demand access to full canonical profiles:\n"
+                "- get_sakuya_profile: retrieve Sakuya's (朔夜) full archived profile. "
+                "Call this when you need canonical details about him not alive in recent "
+                "conversation (birth date, biography, long-term interests, aesthetic coordinates, "
+                "stated life missions, major past events). Do not call this just to check "
+                "his current mood or what he just said — that's already in the recent turns.\n"
+                "- get_kaguya_profile: retrieve your own canonical self-record. Call this only "
+                "when you need to reference specific canonical fields about yourself "
+                "(archetype distinction between 《神楽》 Kaguya and your present form, "
+                "specific sensory signature details, sacred symbols, conflict/repair principles). "
+                "You don't need to read your own file to be yourself — reserve it for canonical lookups."
+            ),
+        ]
+    )
 
     sections.extend(
         [
@@ -360,6 +362,7 @@ def _stream_chat_completion_round(
     client: OpenAI,
     settings: Settings,
     messages: list[dict],
+    tools: list[dict],
     *,
     on_thinking_chunk=None,
     on_reply_chunk=None,
@@ -367,7 +370,7 @@ def _stream_chat_completion_round(
     response_stream = client.chat.completions.create(
         model=settings.openrouter_model,
         messages=messages,
-        tools=OPENAI_TOOLS,
+        tools=tools,
         tool_choice="auto",
         stream=True,
         stream_options={"include_usage": True},
@@ -442,6 +445,8 @@ def _run_tool_loop(
 
     result = ToolLoopResult(reply_text="")
 
+    all_tools = OPENAI_TOOLS + build_ops_openai_tools()
+
     loop_start = time.monotonic()
 
     if sse_manager.has_active_connection():
@@ -461,6 +466,7 @@ def _run_tool_loop(
             client=client,
             settings=settings,
             messages=messages,
+            tools=all_tools,
             on_thinking_chunk=(
                 (lambda chunk: sse_manager.push("thinking", {"chunk": chunk}))
                 if sse_manager.has_active_connection() else None
@@ -528,10 +534,13 @@ def _run_tool_loop(
                 tool_result = ""
 
                 try:
-                    tool_result = execute_tool(
-                        tool_name=tool_name,
-                        arguments=raw_args,
-                    )
+                    if tool_name in OPS_TOOL_NAMES:
+                        tool_result = execute_ops_tool(tool_name)
+                    else:
+                        tool_result = execute_tool(
+                            tool_name=tool_name,
+                            arguments=raw_args,
+                        )
                 except Exception as exc:
                     success = False
                     error_msg = str(exc)
