@@ -62,13 +62,13 @@ export default function DiaryList({ entries }) {
   return (
     <div>
       <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-        辉夜日记
+        diary
       </span>
       <div style={{ marginTop: '8px' }}>
         {!entries || entries.length === 0 ? (
           <div className="card p-5 text-center">
             <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              暂无日记
+              no entries
             </span>
           </div>
         ) : (

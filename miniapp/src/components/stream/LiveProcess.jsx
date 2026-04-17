@@ -1,5 +1,27 @@
 import { useEffect, useMemo, useRef } from 'react'
 
+function stripMempalacePrefix(name) {
+  if (typeof name !== 'string') return String(name ?? '')
+  return name.replace(/^mempalace_/, '')
+}
+
+function formatPalaceWrites(writes) {
+  if (!writes || typeof writes !== 'object') return ''
+  return Object.entries(writes)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${v} ${k}`)
+    .join(' / ')
+}
+
+function translateProcessingMessage(data) {
+  const msg = data?.message || ''
+  if (!msg) return data?.step || ''
+  if (msg.includes('正在处理消息')) return 'processing...'
+  const roundMatch = msg.match(/第\s*(\d+)\s*轮思考中/)
+  if (roundMatch) return `thinking (round ${roundMatch[1]})...`
+  return msg
+}
+
 function mergeStreamEvents(events) {
   const merged = []
 
@@ -48,7 +70,7 @@ function EventLine({ event }) {
     return (
       <div className="flex items-start gap-2 py-1">
         <WaitingDots />
-        <span style={{ color: 'var(--text-muted)' }}>{data.message || data.step}</span>
+        <span style={{ color: 'var(--text-muted)' }}>{translateProcessingMessage(data)}</span>
       </div>
     )
   }
@@ -56,7 +78,7 @@ function EventLine({ event }) {
   if (type === 'thinking') {
     return (
       <div className="py-1">
-        <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>思考中</div>
+        <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>thinking</div>
         <div
           className="text-sm"
           style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}
@@ -70,7 +92,7 @@ function EventLine({ event }) {
   if (type === 'replying') {
     return (
       <div className="py-1">
-        <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>回复生成中</div>
+        <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>replying</div>
         <div
           className="text-sm"
           style={{ color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}
@@ -104,7 +126,7 @@ function EventLine({ event }) {
     return (
       <div className="flex items-start gap-2 py-0.5 pl-6">
         <span className="text-sm" style={{ color: success ? 'var(--success)' : 'var(--fail)' }}>
-          {success ? '完成' : '失败'}
+          {success ? 'done' : 'failed'}
           {data.duration_ms != null && (
             <span className="font-mono ml-1">({data.duration_ms}ms)</span>
           )}
@@ -117,58 +139,59 @@ function EventLine({ event }) {
 }
 
 function StatCard({ stats }) {
-  const palaceWrites = typeof stats.palace_writes === 'object'
-    ? JSON.stringify(stats.palace_writes)
-    : stats.palace_writes
   const toolCount = Array.isArray(stats.tools) ? stats.tools.length : (stats.tools ? 1 : 0)
+  const hasPalaceWrites =
+    stats.palace_writes &&
+    typeof stats.palace_writes === 'object' &&
+    Object.values(stats.palace_writes).some(v => v)
 
   return (
     <div className="mt-3">
-      <div style={{ height: '1px', background: 'var(--border)' }} />
+      <div style={{ height: '1px', background: 'var(--border)', margin: '8px 0' }} />
       <div
-        className="text-xs"
         style={{
-          color: 'var(--text-muted)',
-          textAlign: 'center',
-          padding: '8px 0',
+          fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+          fontSize: '11px',
+          color: 'var(--text-secondary)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0 10px',
+          lineHeight: 1.6,
         }}
       >
-        完成
-      </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-        <div>
-          <span style={{ color: 'var(--text-muted)' }}>输入: </span>
-          <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 400 }}>
-            {stats.input_tokens?.toLocaleString()}
-          </span>
-        </div>
-        <div>
-          <span style={{ color: 'var(--text-muted)' }}>输出: </span>
-          <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 400 }}>
-            {stats.output_tokens?.toLocaleString()}
-          </span>
-        </div>
-        <div>
-          <span style={{ color: 'var(--text-muted)' }}>工具: </span>
-          <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 400 }}>
-            {toolCount}
-          </span>
-        </div>
-        <div>
-          <span style={{ color: 'var(--text-muted)' }}>耗时: </span>
-          <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 400 }}>
-            {stats.elapsed_ms != null ? `${(stats.elapsed_ms / 1000).toFixed(1)}s` : '-'}
-          </span>
-        </div>
-        {palaceWrites && (
-          <div className="col-span-2">
-            <span style={{ color: 'var(--text-muted)' }}>宫殿写入: </span>
-            <span className="font-mono text-sm" style={{ color: 'var(--accent)', fontWeight: 400 }}>
-              {palaceWrites}
-            </span>
-          </div>
+        <span>in {stats.input_tokens?.toLocaleString() ?? '\u2014'}</span>
+        <span>{'\u00b7'}</span>
+        <span>out {stats.output_tokens?.toLocaleString() ?? '\u2014'}</span>
+        <span>{'\u00b7'}</span>
+        <span>{toolCount} calls</span>
+        <span>{'\u00b7'}</span>
+        <span>{stats.elapsed_ms != null ? `${(stats.elapsed_ms / 1000).toFixed(1)}s` : '\u2014'}</span>
+        {hasPalaceWrites && (
+          <>
+            <span>{'\u00b7'}</span>
+            <span>{formatPalaceWrites(stats.palace_writes)}</span>
+          </>
         )}
       </div>
+
+      {Array.isArray(stats.tools) && stats.tools.length > 0 && (
+        <div
+          style={{
+            fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
+            marginTop: '4px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0 12px',
+            lineHeight: 1.6,
+          }}
+        >
+          {stats.tools.map((t, i) => (
+            <span key={i}>{stripMempalacePrefix(t)}</span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -202,7 +225,7 @@ export default function LiveProcess({ status, events, stats, connected }) {
       <div className="card p-5">
         <div className="flex items-center justify-between">
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            等待消息...
+            waiting for messages...
           </p>
           <StatusDot connected={connected} />
         </div>
@@ -214,7 +237,7 @@ export default function LiveProcess({ status, events, stats, connected }) {
     <div className="card p-5">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          实时
+          live
         </span>
         <StatusDot connected={connected} />
       </div>

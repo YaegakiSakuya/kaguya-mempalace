@@ -45,7 +45,7 @@ function DrawerItem({ drawer, isLast }) {
           className="font-mono"
           style={{ fontSize: '11px', color: 'var(--text-secondary)' }}
         >
-          {expanded ? '收起' : '展开'}
+          {expanded ? 'collapse' : 'expand'}
         </span>
         {type && (
           <span className="font-mono" style={{ fontSize: '11px', color: 'var(--accent-dim)' }}>
