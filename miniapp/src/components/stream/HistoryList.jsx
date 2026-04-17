@@ -1,5 +1,18 @@
 import { useState } from 'react'
 
+function stripMempalacePrefix(name) {
+  if (typeof name !== 'string') return String(name ?? '')
+  return name.replace(/^mempalace_/, '')
+}
+
+function formatPalaceWrites(writes) {
+  if (!writes || typeof writes !== 'object') return ''
+  return Object.entries(writes)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${v} ${k}`)
+    .join(' / ')
+}
+
 function formatTime(ts) {
   if (!ts) return '--:--'
   const d = new Date(ts)
@@ -14,13 +27,15 @@ function HistoryItem({ item, isLast }) {
 
   const inputTokens = item.total_prompt_tokens ?? item.input_tokens ?? item.prompt_tokens ?? 0
   const outputTokens = item.total_completion_tokens ?? item.output_tokens ?? item.completion_tokens ?? 0
-  const elapsed = item.elapsed_ms
-  const rounds = item.total_rounds ?? item.rounds ?? 0
+  const rounds = item.total_rounds ?? item.rounds ?? null
   const tools = item.tools_called || item.tools || []
   const toolCount = Array.isArray(tools) ? tools.length : (tools ? 1 : 0)
-  const palaceWrites = typeof item.palace_writes === 'object'
-    ? JSON.stringify(item.palace_writes)
-    : item.palace_writes
+  const rawPalaceWrites = item.palace_writes
+  const hasPalaceWrites = rawPalaceWrites && (
+    typeof rawPalaceWrites === 'string'
+      ? rawPalaceWrites.trim() !== ''
+      : typeof rawPalaceWrites === 'object' && Object.keys(rawPalaceWrites).length > 0
+  )
   const thinkingPreview = item.thinking_text || item.thinking_preview || null
   const thinkingNeedsCollapse = (thinkingPreview || '').length > THINKING_COLLAPSE_THRESHOLD
   const thinkingCollapsed = thinkingNeedsCollapse && !thinkingExpanded
@@ -100,44 +115,9 @@ function HistoryItem({ item, isLast }) {
             paddingTop: '12px',
           }}
         >
-          {toolCount > 0 && (
-            <div className="mb-2">
-              <span style={{ color: 'var(--text-muted)' }}>工具: </span>
-              <span className="font-mono text-xs">
-                {Array.isArray(tools) ? tools.join(', ') : String(tools)}
-              </span>
-            </div>
-          )}
-
-          {rounds != null && (
-            <div className="mb-2">
-              <span style={{ color: 'var(--text-muted)' }}>轮次: </span>
-              <span className="font-mono text-xs">{rounds}</span>
-            </div>
-          )}
-
-          <div className="mb-2">
-            <span style={{ color: 'var(--text-muted)' }}>tokens: </span>
-            <span className="font-mono text-xs">
-              {inputTokens.toLocaleString()} IN / {outputTokens.toLocaleString()} OUT
-            </span>
-            {elapsed != null && (
-              <span className="font-mono text-xs" style={{ marginLeft: '12px', color: 'var(--text-muted)' }}>
-                {(elapsed / 1000).toFixed(1)}s
-              </span>
-            )}
-          </div>
-
-          {palaceWrites && (
-            <div className="mb-2">
-              <span style={{ color: 'var(--text-muted)' }}>宫殿写入: </span>
-              <span className="font-mono text-xs">{palaceWrites}</span>
-            </div>
-          )}
-
           {thinkingPreview && (
             <div className="mb-3">
-              <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>思维链</div>
+              <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>thinking</div>
               <div style={{ position: 'relative' }}>
                 <div
                   className="text-xs leading-relaxed"
@@ -177,7 +157,7 @@ function HistoryItem({ item, isLast }) {
                     fontFamily: 'inherit',
                   }}
                 >
-                  {thinkingExpanded ? '收起' : '展开全部'}
+                  {thinkingExpanded ? 'collapse' : 'expand'}
                 </button>
               )}
             </div>
@@ -185,7 +165,7 @@ function HistoryItem({ item, isLast }) {
 
           {responsePreview && (
             <div className="mb-1">
-              <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>回复</div>
+              <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>reply</div>
               <div
                 className="text-sm leading-relaxed"
                 style={{ color: 'var(--text)', whiteSpace: 'pre-wrap' }}
@@ -195,9 +175,40 @@ function HistoryItem({ item, isLast }) {
             </div>
           )}
 
-          {!toolCount && !palaceWrites && !thinkingPreview && !responsePreview && (
+          {!toolCount && !hasPalaceWrites && !thinkingPreview && !responsePreview && (
             <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              无详细信息
+              no details
+            </div>
+          )}
+
+          {(toolCount > 0 || rounds != null || hasPalaceWrites) && (
+            <div
+              style={{
+                marginTop: '12px',
+                paddingTop: '10px',
+                borderTop: '1px solid var(--border)',
+                fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+                fontSize: '11px',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.6,
+              }}
+            >
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0 10px' }}>
+                {rounds != null && <span>{rounds} rounds</span>}
+                {hasPalaceWrites && (
+                  <>
+                    {rounds != null && <span>{'\u00b7'}</span>}
+                    <span>{typeof rawPalaceWrites === 'string' ? rawPalaceWrites : formatPalaceWrites(rawPalaceWrites)}</span>
+                  </>
+                )}
+              </div>
+              {tools && (Array.isArray(tools) ? tools.length > 0 : String(tools).trim() !== '') && (
+                <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '0 12px' }}>
+                  {(Array.isArray(tools) ? tools : String(tools).split(/\s*,\s*/)).map((t, i) => (
+                    <span key={i}>{stripMempalacePrefix(t)}</span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -212,7 +223,7 @@ export default function HistoryList({ items, onRefresh, loading }) {
     <div>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          历史
+          history
         </span>
         <button
           onClick={(e) => { e.stopPropagation(); onRefresh() }}
@@ -231,13 +242,13 @@ export default function HistoryList({ items, onRefresh, loading }) {
           onMouseEnter={(e) => { if (!loading) e.currentTarget.style.color = 'var(--accent)' }}
           onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)' }}
         >
-          {loading ? '...' : '刷新'}
+          {loading ? '...' : 'refresh'}
         </button>
       </div>
       {items.length === 0 ? (
         <div className="card p-5 text-center">
           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            暂无历史记录
+            no history
           </span>
         </div>
       ) : (

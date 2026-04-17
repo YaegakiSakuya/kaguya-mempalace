@@ -61,7 +61,7 @@ function TabBar({ tab, onTabChange }) {
               transition: 'color 250ms ease-out',
             }}
           >
-            {t === 'stream' ? '消息流' : '宫殿'}
+            {t === 'stream' ? 'stream' : 'palace'}
             <span
               style={{
                 position: 'absolute',
