@@ -25,6 +25,7 @@ def _write_turn_summary(logs_dir: Path, loop_result: ToolLoopResult, turn_type: 
     """Write a turn summary JSONL record after a reply or checkpoint completes."""
     ts = _now_iso()
     turn_id = f"turn_{uuid.uuid4().hex[:12]}"
+    thinking_text = loop_result.thinking_preview or ""
     append_jsonl(logs_dir / "turn_summaries.jsonl", {
         "ts": ts,
         "turn_type": turn_type,
@@ -38,7 +39,8 @@ def _write_turn_summary(logs_dir: Path, loop_result: ToolLoopResult, turn_type: 
         "tools_failed": loop_result.tools_failed,
         "palace_writes": loop_result.palace_writes,
         "response_preview": loop_result.reply_text,
-        "thinking_preview": loop_result.thinking_preview,
+        "thinking_text": thinking_text,
+        "thinking_preview": thinking_text,
     })
 
 
