@@ -18,7 +18,7 @@ function formatTime(ts) {
   const then = new Date(ts)
   if (isNaN(then.getTime())) return ''
   const now = new Date()
-  const diffMs = now.getTime() - then.getTime()
+  const diffMs = Math.max(0, now.getTime() - then.getTime())
   const diffMin = Math.floor(diffMs / 60000)
   const diffHr = Math.floor(diffMs / 3600000)
 
