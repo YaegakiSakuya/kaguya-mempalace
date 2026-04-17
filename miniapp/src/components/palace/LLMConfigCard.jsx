@@ -228,17 +228,22 @@ export default function LLMConfigCard() {
 
   const activeProvider = providers.find((p) => p.id === activeProviderId) || null
 
+  const switchSeqRef = useRef(0)
+
   const switchActive = async (providerId, model) => {
     const prevId = activeProviderId
     const prevModel = activeModel
+    const seq = ++switchSeqRef.current
     setActiveProviderId(providerId)
     setActiveModel(model)
     try {
       await post('/miniapp/config/active', { provider_id: providerId, model })
+      if (seq !== switchSeqRef.current) return
       setProviders((ps) =>
         ps.map((p) => (p.id === providerId ? { ...p, last_model: model } : p))
       )
     } catch (err) {
+      if (seq !== switchSeqRef.current) return
       setActiveProviderId(prevId)
       setActiveModel(prevModel)
       handleError(err, '切换')
@@ -254,7 +259,6 @@ export default function LLMConfigCard() {
       nextModel = p.available_models[0]
     }
     if (!nextModel) {
-      setActiveProviderId(newId)
       showToast(`${p.name} 尚无模型，请先刷新模型列表`, 'fail')
       return
     }
