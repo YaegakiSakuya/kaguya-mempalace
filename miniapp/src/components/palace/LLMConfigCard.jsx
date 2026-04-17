@@ -265,10 +265,12 @@ export default function LLMConfigCard() {
     if (!p) return
 
     let candidate = p
+    const prevId = activeProviderId
+    let didOptimisticSwitch = false
 
     if ((candidate.available_models || []).length === 0) {
-      const prevId = activeProviderId
       setActiveProviderId(newId)
+      didOptimisticSwitch = true
       setAutoRefreshingId(newId)
       try {
         const res = await post(`/miniapp/config/providers/${newId}/models`)
@@ -292,6 +294,7 @@ export default function LLMConfigCard() {
 
     const models = candidate.available_models || []
     if (models.length === 0) {
+      if (didOptimisticSwitch) setActiveProviderId(prevId)
       showToast(`${p.name} 暂无可用模型`, 'fail')
       return
     }
