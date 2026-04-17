@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import useTelegram from './hooks/useTelegram'
 import useSSE from './hooks/useSSE'
+import useHaptic from './hooks/useHaptic'
 import StreamPage from './pages/StreamPage'
 import PalacePage from './pages/PalacePage'
 import { IconStream, IconPalace } from './components/icons'
@@ -63,6 +64,7 @@ function Header({ sseStatus }) {
 }
 
 function TabBar({ tab, onTabChange }) {
+  const { impact } = useHaptic()
   const tabs = ['stream', 'palace']
   return (
     <div
@@ -77,7 +79,7 @@ function TabBar({ tab, onTabChange }) {
         return (
           <button
             key={t}
-            onClick={() => onTabChange(t)}
+            onClick={() => { impact('light'); onTabChange(t) }}
             aria-label={t}
             aria-pressed={isActive}
             style={{

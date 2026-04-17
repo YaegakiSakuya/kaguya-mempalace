@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import useHaptic from '../../hooks/useHaptic'
 
 function DiaryEntry({ entry, isLast }) {
+  const { impact } = useHaptic()
   const [expanded, setExpanded] = useState(false)
 
   const title = entry.date || entry.title || null
@@ -8,7 +10,7 @@ function DiaryEntry({ entry, isLast }) {
 
   return (
     <div
-      onClick={() => setExpanded(!expanded)}
+      onClick={() => { impact('light'); setExpanded(!expanded) }}
       style={{
         cursor: 'pointer',
         padding: '12px 16px',

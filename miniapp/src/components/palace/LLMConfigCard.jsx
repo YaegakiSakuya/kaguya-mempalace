@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import useTelegram from '../../hooks/useTelegram'
 import useApi from '../../hooks/useApi'
+import useHaptic from '../../hooks/useHaptic'
 
 const TOAST_FAIL_COLOR = '#C44'
 
@@ -80,6 +81,7 @@ function Toast({ toast }) {
 }
 
 function ProviderForm({ initial, onSave, onCancel, isCreate }) {
+  const { impact } = useHaptic()
   const [name, setName] = useState(initial?.name || '')
   const [baseUrl, setBaseUrl] = useState(initial?.base_url || '')
   const [apiKey, setApiKey] = useState('')
@@ -87,6 +89,7 @@ function ProviderForm({ initial, onSave, onCancel, isCreate }) {
   const [saving, setSaving] = useState(false)
 
   const submit = async () => {
+    impact('medium')
     const n = name.trim()
     const u = baseUrl.trim()
     const k = apiKey.trim()
@@ -170,6 +173,7 @@ function ProviderForm({ initial, onSave, onCancel, isCreate }) {
 export default function LLMConfigCard() {
   const { initData } = useTelegram()
   const { get, post, patch, del } = useApi(initData)
+  const { impact, notification } = useHaptic()
 
   const [providers, setProviders] = useState([])
   const [activeProviderId, setActiveProviderId] = useState('')
@@ -182,13 +186,16 @@ export default function LLMConfigCard() {
   const [creatingNew, setCreatingNew] = useState(false)
   const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const [pingingId, setPingingId] = useState(null)
+  const [refreshingIdSet, setRefreshingIdSet] = useState(() => new Set())
+  const [autoRefreshingId, setAutoRefreshingId] = useState(null)
 
   const toastTimer = useRef(null)
   const showToast = useCallback((message, type = 'ok') => {
     setToast({ message, type })
+    notification(type === 'fail' ? 'error' : 'success')
     if (toastTimer.current) clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 3000)
-  }, [])
+  }, [notification])
 
   const handleError = useCallback((err, action) => {
     if (err?.status === 401) {
@@ -242,6 +249,7 @@ export default function LLMConfigCard() {
       setProviders((ps) =>
         ps.map((p) => (p.id === providerId ? { ...p, last_model: model } : p))
       )
+      notification('success')
     } catch (err) {
       if (seq !== switchSeqRef.current) return
       setActiveProviderId(prevId)
@@ -250,27 +258,62 @@ export default function LLMConfigCard() {
     }
   }
 
-  const handleProviderChange = (e) => {
+  const handleProviderChange = async (e) => {
+    impact('light')
     const newId = e.target.value
     const p = providers.find((x) => x.id === newId)
     if (!p) return
-    let nextModel = p.last_model || ''
-    if (!nextModel && p.available_models && p.available_models.length > 0) {
-      nextModel = p.available_models[0]
+
+    let candidate = p
+    const prevId = activeProviderId
+    let didOptimisticSwitch = false
+
+    if ((candidate.available_models || []).length === 0) {
+      setActiveProviderId(newId)
+      didOptimisticSwitch = true
+      setAutoRefreshingId(newId)
+      try {
+        const res = await post(`/miniapp/config/providers/${newId}/models`)
+        const models = res?.models || []
+        setProviders((ps) =>
+          ps.map((x) =>
+            x.id === newId
+              ? { ...x, available_models: models, models_refreshed_at: res?.refreshed_at || x.models_refreshed_at }
+              : x
+          )
+        )
+        candidate = { ...candidate, available_models: models }
+      } catch (err) {
+        setActiveProviderId(prevId)
+        setAutoRefreshingId(null)
+        handleError(err, '刷新')
+        return
+      }
+      setAutoRefreshingId(null)
     }
-    if (!nextModel) {
-      showToast(`${p.name} 尚无模型，请先刷新模型列表`, 'fail')
+
+    const models = candidate.available_models || []
+    if (models.length === 0) {
+      if (didOptimisticSwitch) setActiveProviderId(prevId)
+      showToast(`${p.name} 暂无可用模型`, 'fail')
       return
     }
+
+    const nextModel = candidate.last_model && models.includes(candidate.last_model)
+      ? candidate.last_model
+      : models[0]
+
     switchActive(newId, nextModel)
   }
 
   const handleModelChange = (e) => {
+    impact('light')
     const newModel = e.target.value
     switchActive(activeProviderId, newModel)
   }
 
   const handleRefreshModels = async () => {
+    impact('medium')
     if (!activeProviderId) return
     setRefreshingModels(true)
     try {
@@ -291,7 +334,38 @@ export default function LLMConfigCard() {
     }
   }
 
+  const handleRefreshProviderModels = async (provider) => {
+    impact('medium')
+    setRefreshingIdSet((prev) => {
+      const next = new Set(prev)
+      next.add(provider.id)
+      return next
+    })
+    try {
+      const res = await post(`/miniapp/config/providers/${provider.id}/models`)
+      const models = res?.models || []
+      setProviders((ps) =>
+        ps.map((p) =>
+          p.id === provider.id
+            ? { ...p, available_models: models, models_refreshed_at: res?.refreshed_at || p.models_refreshed_at }
+            : p
+        )
+      )
+      showToast(`${provider.name} 刷新成功 · ${models.length} 个模型`, 'ok')
+    } catch (err) {
+      const msg = err?.data?.error || err?.message || 'unknown'
+      showToast(`${provider.name} 刷新失败：${msg}`, 'fail')
+    } finally {
+      setRefreshingIdSet((prev) => {
+        const next = new Set(prev)
+        next.delete(provider.id)
+        return next
+      })
+    }
+  }
+
   const handlePing = async (provider) => {
+    impact('medium')
     setPingingId(provider.id)
     try {
       const body = provider.last_model ? { model: provider.last_model } : {}
@@ -388,7 +462,8 @@ export default function LLMConfigCard() {
             <select
               value={activeProviderId}
               onChange={handleProviderChange}
-              style={selectStyle}
+              disabled={!!autoRefreshingId}
+              style={{ ...selectStyle, opacity: autoRefreshingId ? 0.5 : 1 }}
             >
               {providers.length === 0 && <option value="">— 加载中 —</option>}
               {providers.map((p) => (
@@ -431,7 +506,7 @@ export default function LLMConfigCard() {
         {/* 第三层：管理站点 */}
         <div>
           <div
-            onClick={() => setManagementOpen(!managementOpen)}
+            onClick={() => { impact('light'); setManagementOpen(!managementOpen) }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -494,8 +569,15 @@ export default function LLMConfigCard() {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => setEditingId(p.id)} style={btnStyle}>
+                        <button onClick={() => { impact('medium'); setEditingId(p.id) }} style={btnStyle}>
                           编辑
+                        </button>
+                        <button
+                          onClick={() => handleRefreshProviderModels(p)}
+                          disabled={refreshingIdSet.has(p.id)}
+                          style={{ ...btnStyle, opacity: refreshingIdSet.has(p.id) ? 0.5 : 1 }}
+                        >
+                          {refreshingIdSet.has(p.id) ? '刷新中...' : '刷新模型'}
                         </button>
                         <button
                           onClick={() => handlePing(p)}
@@ -505,7 +587,7 @@ export default function LLMConfigCard() {
                           {pingingId === p.id ? '测试中...' : '测试'}
                         </button>
                         <button
-                          onClick={() => setConfirmDeleteId(p.id)}
+                          onClick={() => { notification('warning'); setConfirmDeleteId(p.id) }}
                           style={{ ...btnStyle, color: TOAST_FAIL_COLOR }}
                         >
                           删除
@@ -523,7 +605,7 @@ export default function LLMConfigCard() {
                 />
               ) : (
                 <div style={{ padding: '12px 16px' }}>
-                  <button onClick={() => setCreatingNew(true)} style={btnPrimaryStyle}>
+                  <button onClick={() => { impact('medium'); setCreatingNew(true) }} style={btnPrimaryStyle}>
                     + 新增站点
                   </button>
                 </div>
