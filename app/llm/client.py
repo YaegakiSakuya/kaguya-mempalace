@@ -365,12 +365,12 @@ def _stream_chat_completion_round(
     messages: list[dict],
     tools: list[dict],
     *,
+    model: str,
     on_thinking_chunk=None,
     on_reply_chunk=None,
 ):
-    _, _, active_model = runtime_config.get_active_client_config()
     response_stream = client.chat.completions.create(
-        model=active_model,
+        model=model,
         messages=messages,
         tools=tools,
         tool_choice="auto",
@@ -446,7 +446,16 @@ def _run_tool_loop(
     max_tool_rounds: int,
     log_context: dict | None = None,
 ) -> ToolLoopResult:
-    client = create_client(settings)
+    # Snapshot the runtime-config LLM settings once per tool loop so the client,
+    # base URL and model stay consistent across rounds even if the operator
+    # switches provider/model mid-loop.
+    base_url, api_key, active_model = runtime_config.get_active_client_config()
+    client = OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=60.0,
+        max_retries=2,
+    )
     logs_dir = settings.logs_dir
     ctx = log_context or {}
     turn_type = ctx.get("turn_type", "unknown")
@@ -476,6 +485,7 @@ def _run_tool_loop(
             settings=settings,
             messages=messages,
             tools=all_tools,
+            model=active_model,
             on_thinking_chunk=(
                 (lambda chunk: sse_manager.push("thinking", {"chunk": chunk}))
                 if sse_manager.has_active_connection() else None
@@ -495,15 +505,11 @@ def _run_tool_loop(
             completion_tok = getattr(usage, "completion_tokens", 0) or 0
             result.total_prompt_tokens += prompt_tok
             result.total_completion_tokens += completion_tok
-            try:
-                _, _, logged_model = runtime_config.get_active_client_config()
-            except Exception:
-                logged_model = settings.openrouter_model
             append_jsonl(logs_dir / "token_usage.jsonl", {
                 "ts": _now_iso(),
                 "turn_type": turn_type,
                 "round": round_index + 1,
-                "model": logged_model,
+                "model": active_model,
                 "prompt_tokens": prompt_tok,
                 "completion_tokens": completion_tok,
                 "total_tokens": prompt_tok + completion_tok,

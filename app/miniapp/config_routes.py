@@ -1,8 +1,11 @@
 """Mini-app routes for managing the runtime LLM configuration overlay.
 
-All routes live under ``/miniapp/config/*`` and are gated by Telegram Mini App
-``initData`` verification (``verify_telegram_init_data``). API keys are never
-returned in responses — :mod:`app.core.runtime_config` always masks them.
+All routes live under ``/miniapp/config/*``. They combine Telegram Mini App
+``initData`` signature verification (``verify_telegram_init_data``) with an
+explicit allowlist check against ``settings.telegram_allowed_chat_ids`` so that
+only the operator (not any Telegram user who can present valid Mini App
+``initData`` for this bot) can mutate global LLM provider state. API keys are
+never returned in responses — :mod:`app.core.runtime_config` always masks them.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ import time
 from typing import Any
 
 import requests
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
@@ -113,7 +116,8 @@ def build_config_router(settings: Settings) -> APIRouter:
     Args:
         settings: The process-wide :class:`Settings`. Passed so the router
             factory can ensure the runtime_config module is initialized with
-            the same settings used by the rest of the app.
+            the same settings used by the rest of the app, and so that the
+            allowlist check can consult ``telegram_allowed_chat_ids``.
 
     Returns:
         A ``fastapi.APIRouter`` with all config endpoints registered.
@@ -121,7 +125,28 @@ def build_config_router(settings: Settings) -> APIRouter:
     # Make sure runtime_config is wired to the same settings we were given.
     runtime_config.init(settings)
 
-    auth = [Depends(verify_telegram_init_data)]
+    # Allowlist dep: signature-valid initData alone is not enough — the Telegram
+    # user id must also appear in ``telegram_allowed_chat_ids`` when it is set.
+    # When the allowlist is empty we mirror the bot's own "open" policy (see
+    # ``app/main.py::is_allowed_chat``) so the gate is never stricter than the
+    # bot itself.
+    allowed_ids = {
+        str(cid).strip()
+        for cid in (settings.telegram_allowed_chat_ids or [])
+        if str(cid).strip()
+    }
+
+    async def _verify_allowed_user(
+        user: dict = Depends(verify_telegram_init_data),
+    ) -> dict:
+        if not allowed_ids:
+            return user
+        uid = str(user.get("id", "")).strip()
+        if not uid or uid not in allowed_ids:
+            raise HTTPException(status_code=403, detail="user not allowed")
+        return user
+
+    auth = [Depends(_verify_allowed_user)]
     router = APIRouter(prefix="/miniapp/config", tags=["config"])
 
     # ----- Providers list / create -----
