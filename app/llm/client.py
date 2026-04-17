@@ -590,12 +590,10 @@ def _run_tool_loop(
 
         result.total_rounds = round_index + 1
 
-        if streamed_reply and streamed_reply.strip():
-            result.reply_segments.append(streamed_reply)
+        if not streamed_reply or not streamed_reply.strip():
+            raise RuntimeError("LLM returned empty content on final round")
 
-        if not result.reply_segments:
-            raise RuntimeError("LLM returned empty content across all rounds")
-
+        result.reply_segments.append(streamed_reply)
         result.reply_text = "\n\n".join(result.reply_segments)
 
         total_elapsed = int((time.monotonic() - loop_start) * 1000)
