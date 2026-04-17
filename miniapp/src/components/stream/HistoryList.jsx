@@ -86,11 +86,12 @@ function HistoryItem({ item, isLast }) {
 
       <div
         style={{
-          maxHeight: expanded ? '2000px' : '0px',
-          overflow: 'hidden',
-          transition: 'max-height 300ms ease-out',
+          display: 'grid',
+          gridTemplateRows: expanded ? '1fr' : '0fr',
+          transition: 'grid-template-rows 300ms ease-out',
         }}
       >
+        <div style={{ overflow: 'hidden', minHeight: 0 }}>
         <div
           className="text-sm"
           style={{
@@ -199,6 +200,7 @@ function HistoryItem({ item, isLast }) {
               无详细信息
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>
