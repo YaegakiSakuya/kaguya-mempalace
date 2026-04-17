@@ -369,17 +369,21 @@ def _stream_chat_completion_round(
     on_thinking_chunk=None,
     on_reply_chunk=None,
 ):
-    response_stream = client.chat.completions.create(
+    # 智谱 GLM 独家扩展参数，非智谱 provider 不传
+    base_url, _, _ = runtime_config.get_active_client_config()
+    create_kwargs = dict(
         model=model,
         messages=messages,
         tools=tools,
         tool_choice="auto",
         stream=True,
         stream_options={"include_usage": True},
-        extra_body={
-            "thinking": {"type": "enabled", "clear_thinking": False}
-        },
     )
+    if "bigmodel.cn" in (base_url or "").lower():
+        create_kwargs["extra_body"] = {
+            "thinking": {"type": "enabled", "clear_thinking": False}
+        }
+    response_stream = client.chat.completions.create(**create_kwargs)
 
     reasoning_chunks: list[str] = []
     reply_chunks: list[str] = []
