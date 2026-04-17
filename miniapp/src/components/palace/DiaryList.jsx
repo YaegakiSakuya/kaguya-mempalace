@@ -61,28 +61,23 @@ function DiaryEntry({ entry, isLast }) {
 export default function DiaryList({ entries }) {
   return (
     <div>
-      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-        diary
-      </span>
-      <div style={{ marginTop: '8px' }}>
-        {!entries || entries.length === 0 ? (
-          <div className="card p-5 text-center">
-            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              no entries
-            </span>
-          </div>
-        ) : (
-          <div className="card">
-            {entries.map((entry, i) => (
-              <DiaryEntry
-                key={entry.id || i}
-                entry={entry}
-                isLast={i === entries.length - 1}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {!entries || entries.length === 0 ? (
+        <div className="card p-5 text-center">
+          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            no entries
+          </span>
+        </div>
+      ) : (
+        <div className="card">
+          {entries.map((entry, i) => (
+            <DiaryEntry
+              key={entry.id || i}
+              entry={entry}
+              isLast={i === entries.length - 1}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

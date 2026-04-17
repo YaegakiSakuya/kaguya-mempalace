@@ -235,35 +235,25 @@ export default function WingBrowser({ wings }) {
 
   if (!wings || wings.length === 0) {
     return (
-      <div>
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          Wings
+      <div className="card p-5 text-center">
+        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          No wings found
         </span>
-        <div className="card p-5 mt-2 text-center">
-          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            No wings found
-          </span>
-        </div>
       </div>
     )
   }
 
   return (
-    <div>
-      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-        Wings
-      </span>
-      <div className="card" style={{ marginTop: '8px' }}>
-        {wings.map((wing, i) => (
-          <WingItem
-            key={wing}
-            wing={wing}
-            isOpen={openWing === wing}
-            onToggle={() => setOpenWing(openWing === wing ? null : wing)}
-            isLast={i === wings.length - 1}
-          />
-        ))}
-      </div>
+    <div className="card">
+      {wings.map((wing, i) => (
+        <WingItem
+          key={wing}
+          wing={wing}
+          isOpen={openWing === wing}
+          onToggle={() => setOpenWing(openWing === wing ? null : wing)}
+          isLast={i === wings.length - 1}
+        />
+      ))}
     </div>
   )
 }

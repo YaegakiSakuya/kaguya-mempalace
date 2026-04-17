@@ -64,14 +64,6 @@ body {
   word-break: break-word;
 }
 
-@keyframes moon-phase {
-  0%   { transform: scaleX(0.05) translateX(-90px); }
-  25%  { transform: scaleX(0.5)  translateX(-45px); }
-  50%  { transform: scaleX(1.0)  translateX(0); }
-  75%  { transform: scaleX(0.5)  translateX(45px); }
-  100% { transform: scaleX(0.05) translateX(90px); }
-}
-
 @keyframes dots-pulse {
   0%, 100% { opacity: 0.3; }
   50% { opacity: 0.8; }

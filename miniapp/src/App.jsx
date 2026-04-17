@@ -3,43 +3,49 @@ import useTelegram from './hooks/useTelegram'
 import useSSE from './hooks/useSSE'
 import StreamPage from './pages/StreamPage'
 import PalacePage from './pages/PalacePage'
+import { IconStream, IconPalace } from './components/icons'
 
 function MoonPhase({ active }) {
   return (
     <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      viewBox="0 0 22 22"
       style={{
-        opacity: active ? 0.85 : 0.35,
+        opacity: active ? 0.9 : 0.4,
         transition: 'opacity 600ms ease',
       }}
     >
       <defs>
-        <mask id="moon-phase-mask">
-          <rect width="24" height="24" fill="black" />
-          <circle cx="12" cy="12" r="10" fill="white" />
+        <mask id="moon-mask">
+          <rect width="22" height="22" fill="white" />
+          <circle r="9" cy="11" cx={active ? -9 : 30} fill="black">
+            {active && (
+              <animate
+                attributeName="cx"
+                values="-9;31;-9;11"
+                keyTimes="0;0.5;0.5001;1"
+                dur="8s"
+                repeatCount="indefinite"
+              />
+            )}
+          </circle>
         </mask>
       </defs>
       <circle
-        cx="12"
-        cy="12"
-        r="10"
+        cx="11"
+        cy="11"
+        r="9"
+        fill="var(--accent)"
+        mask="url(#moon-mask)"
+      />
+      <circle
+        cx="11"
+        cy="11"
+        r="9"
         fill="none"
         stroke="var(--border-strong)"
-        strokeWidth="0.75"
-      />
-      <ellipse
-        cx="12"
-        cy="12"
-        rx="10"
-        ry="10"
-        fill="var(--accent)"
-        mask="url(#moon-phase-mask)"
-        style={{
-          animation: active ? 'moon-phase 8s ease-in-out infinite' : 'none',
-          transformOrigin: '12px 12px',
-        }}
+        strokeWidth="0.5"
       />
     </svg>
   )
@@ -67,6 +73,7 @@ function TabBar({ tab, onTabChange }) {
     >
       {tabs.map(t => {
         const isActive = tab === t
+        const color = isActive ? 'var(--text)' : 'var(--text-muted)'
         return (
           <button
             key={t}
@@ -74,26 +81,24 @@ function TabBar({ tab, onTabChange }) {
             style={{
               position: 'relative',
               flex: 1,
-              padding: '10px 0',
+              padding: '12px 0',
               background: 'transparent',
               border: 'none',
-              color: isActive ? 'var(--text)' : 'var(--text-muted)',
-              fontSize: '14px',
-              fontWeight: 400,
-              fontFamily: 'inherit',
-              textAlign: 'center',
               cursor: 'pointer',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
               transition: 'color 250ms ease-out',
             }}
           >
-            {t === 'stream' ? 'stream' : 'palace'}
+            {t === 'stream' ? <IconStream color={color} /> : <IconPalace color={color} />}
             <span
               style={{
                 position: 'absolute',
                 left: '50%',
                 bottom: 0,
                 transform: 'translateX(-50%)',
-                width: isActive ? '20px' : '0px',
+                width: isActive ? '18px' : '0px',
                 height: '1px',
                 background: 'var(--accent)',
                 transition: 'all 250ms ease-out',
