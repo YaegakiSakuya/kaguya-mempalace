@@ -9,6 +9,7 @@ from typing import List, Tuple
 
 from openai import OpenAI
 
+from app.core import runtime_config
 from app.core.config import Settings
 from app.inspector.logger import append_jsonl, summarize_arguments, _now_iso
 from app.llm.ops_tools import (
@@ -364,11 +365,12 @@ def _stream_chat_completion_round(
     messages: list[dict],
     tools: list[dict],
     *,
+    model: str,
     on_thinking_chunk=None,
     on_reply_chunk=None,
 ):
     response_stream = client.chat.completions.create(
-        model=settings.openrouter_model,
+        model=model,
         messages=messages,
         tools=tools,
         tool_choice="auto",
@@ -423,9 +425,16 @@ def _stream_chat_completion_round(
 
 
 def create_client(settings: Settings) -> OpenAI:
+    """Build an OpenAI-compatible client using the runtime-config overlay.
+
+    The ``settings`` parameter is kept for signature stability but the live
+    ``base_url`` / ``api_key`` come from :mod:`app.core.runtime_config`, which
+    falls back to ``Settings`` values on first run.
+    """
+    base_url, api_key, _ = runtime_config.get_active_client_config()
     return OpenAI(
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
+        api_key=api_key,
+        base_url=base_url,
         timeout=60.0,
         max_retries=2,
     )
@@ -437,7 +446,16 @@ def _run_tool_loop(
     max_tool_rounds: int,
     log_context: dict | None = None,
 ) -> ToolLoopResult:
-    client = create_client(settings)
+    # Snapshot the runtime-config LLM settings once per tool loop so the client,
+    # base URL and model stay consistent across rounds even if the operator
+    # switches provider/model mid-loop.
+    base_url, api_key, active_model = runtime_config.get_active_client_config()
+    client = OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+        timeout=60.0,
+        max_retries=2,
+    )
     logs_dir = settings.logs_dir
     ctx = log_context or {}
     turn_type = ctx.get("turn_type", "unknown")
@@ -467,6 +485,7 @@ def _run_tool_loop(
             settings=settings,
             messages=messages,
             tools=all_tools,
+            model=active_model,
             on_thinking_chunk=(
                 (lambda chunk: sse_manager.push("thinking", {"chunk": chunk}))
                 if sse_manager.has_active_connection() else None
@@ -490,7 +509,7 @@ def _run_tool_loop(
                 "ts": _now_iso(),
                 "turn_type": turn_type,
                 "round": round_index + 1,
-                "model": settings.openrouter_model,
+                "model": active_model,
                 "prompt_tokens": prompt_tok,
                 "completion_tokens": completion_tok,
                 "total_tokens": prompt_tok + completion_tok,
