@@ -105,12 +105,20 @@ def _make_wrapper(handler: Any, required_fields: set[str]) -> Any:
 
 MCP_PORT = int(os.getenv("MCP_PORT", "8766"))
 
+from mcp.server.transport_security import TransportSecuritySettings  # noqa: E402
+
+# DNS rebinding protection is disabled because this MCP server is accessed
+# via nginx reverse proxy with a production Host header (not localhost).
+# Access control is enforced at the nginx layer (IP allowlist + HTTPS).
 mcp = FastMCP(
     "MemPalace",
     stateless_http=True,
     json_response=True,
     host="127.0.0.1",
     port=MCP_PORT,
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    ),
 )
 
 # ---------------------------------------------------------------------------
