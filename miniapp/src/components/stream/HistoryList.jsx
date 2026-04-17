@@ -14,9 +14,27 @@ function formatPalaceWrites(writes) {
 }
 
 function formatTime(ts) {
-  if (!ts) return '--:--'
-  const d = new Date(ts)
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  if (!ts) return ''
+  const then = new Date(ts)
+  if (isNaN(then.getTime())) return ''
+  const now = new Date()
+  const diffMs = now.getTime() - then.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffHr = Math.floor(diffMs / 3600000)
+
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHr < 24 && then.toDateString() === now.toDateString()) return `${diffHr}h ago`
+
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (then.toDateString() === yesterday.toDateString()) return 'yesterday'
+
+  const sameYear = then.getFullYear() === now.getFullYear()
+  const opts = sameYear
+    ? { month: 'short', day: 'numeric' }
+    : { year: 'numeric', month: 'short', day: 'numeric' }
+  return then.toLocaleDateString('en-US', opts).toLowerCase()
 }
 
 const THINKING_COLLAPSE_THRESHOLD = 500
@@ -47,13 +65,26 @@ function HistoryItem({ item, isLast }) {
     <div
       onClick={() => setExpanded(!expanded)}
       style={{
+        position: 'relative',
         cursor: 'pointer',
-        borderBottom: isLast ? 'none' : '1px solid var(--border)',
-        transition: 'background 150ms ease',
+        borderBottom: isLast ? 'none' : '1px solid',
+        borderBottomColor: expanded ? 'var(--border-strong)' : 'var(--border)',
+        transition: 'background 150ms ease, border-bottom-color 200ms ease',
       }}
       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: expanded ? '2px' : '0px',
+          background: 'var(--accent)',
+          transition: 'width 200ms ease',
+        }}
+      />
       <div
         style={{
           display: 'flex',
