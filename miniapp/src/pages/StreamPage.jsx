@@ -31,7 +31,7 @@ export default function StreamPage({ sse }) {
   }, [fetchHistory])
 
   return (
-    <div className="px-4 flex flex-col gap-3 pb-6">
+    <div className="px-4 flex flex-col gap-4 pb-6">
       <LiveProcess status={status} events={events} stats={stats} connected={connected} />
       <HistoryList items={history} onRefresh={fetchHistory} loading={loading} />
     </div>

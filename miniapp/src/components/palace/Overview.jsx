@@ -1,57 +1,45 @@
 export default function Overview({ data }) {
   const metrics = [
-    { label: 'Wings', key: 'wings', icon: '\u{1F3DB}' },
-    { label: 'Rooms', key: 'rooms', icon: '\u{1F6AA}' },
-    { label: 'Drawers', key: 'drawers', icon: '\u{1F4E6}' },
-    { label: 'KG Entities', key: 'kg_entities', icon: '\u{1F517}' },
-    { label: 'KG Triples', key: 'kg_triples', icon: '\u{1F578}' },
+    { label: 'Wings', key: 'wings' },
+    { label: 'Rooms', key: 'rooms' },
+    { label: 'Drawers', key: 'drawers' },
+    { label: 'KG Entities', key: 'kg_entities' },
+    { label: 'KG Triples', key: 'kg_triples' },
   ]
 
-  if (!data) {
-    return (
-      <div className="card p-4">
-        <div
-          className="grid gap-3"
-          style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}
-        >
-          {metrics.map(m => (
-            <div key={m.key} className="text-center py-2">
-              <div
-                className="text-xl font-mono"
-                style={{ color: 'var(--accent-dim)', opacity: 0.4 }}
-              >
-                --
-              </div>
-              <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                {m.icon} {m.label}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+  const formatValue = (val) => {
+    if (val == null) return '\u2014'
+    return Number(val).toLocaleString()
   }
 
   return (
-    <div className="card p-4">
-      <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}
-      >
-        {metrics.map(m => (
-          <div key={m.key} className="text-center py-2">
-            <div
-              className="text-xl font-mono font-semibold"
-              style={{ color: 'var(--accent)' }}
-            >
-              {(data[m.key] ?? 0).toLocaleString()}
-            </div>
-            <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-              {m.icon} {m.label}
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="card" style={{ paddingLeft: '20px', paddingRight: '20px', paddingTop: '8px', paddingBottom: '8px' }}>
+      {metrics.map((m, idx) => (
+        <div
+          key={m.key}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            padding: '12px 0',
+            borderBottom: idx === metrics.length - 1 ? 'none' : '1px solid var(--border)',
+          }}
+        >
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            {m.label}
+          </span>
+          <span
+            className="font-mono"
+            style={{
+              fontSize: '24px',
+              color: 'var(--accent)',
+              fontWeight: 400,
+            }}
+          >
+            {data ? formatValue(data[m.key]) : '\u2014'}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }

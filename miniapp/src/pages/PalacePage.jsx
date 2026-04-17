@@ -33,7 +33,7 @@ export default function PalacePage() {
   }, [get])
 
   return (
-    <div className="px-4 pb-6 space-y-4">
+    <div className="px-4 pb-6 space-y-6">
       <Overview data={overview} />
       <WingBrowser wings={wings} />
       <DiaryList entries={diary} />

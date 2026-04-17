@@ -8,7 +8,7 @@ function formatTime(ts) {
 
 const THINKING_COLLAPSE_THRESHOLD = 500
 
-function HistoryItem({ item }) {
+function HistoryItem({ item, isLast }) {
   const [expanded, setExpanded] = useState(false)
   const [thinkingExpanded, setThinkingExpanded] = useState(false)
 
@@ -25,35 +25,80 @@ function HistoryItem({ item }) {
   const thinkingNeedsCollapse = (thinkingPreview || '').length > THINKING_COLLAPSE_THRESHOLD
   const thinkingCollapsed = thinkingNeedsCollapse && !thinkingExpanded
   const responsePreview = item.response_preview || ''
+  const totalTokens = inputTokens + outputTokens
+  const summary = item.turn_type || item.summary || responsePreview || '—'
 
   return (
-    <div className="card p-3" onClick={() => setExpanded(!expanded)}>
-      <div className="flex items-center justify-between cursor-pointer">
-        <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            {expanded ? '▾' : '▸'}
-          </span>
-          <span className="text-sm font-mono" style={{ color: 'var(--accent)' }}>
-            {formatTime(item.ts || item.timestamp)}
-          </span>
-          <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
-            {inputTokens.toLocaleString()} IN / {outputTokens.toLocaleString()} OUT
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
-            tools:{toolCount}
-          </span>
-          {elapsed != null && (
-            <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
-              {(elapsed / 1000).toFixed(1)}s
-            </span>
-          )}
-        </div>
+    <div
+      onClick={() => setExpanded(!expanded)}
+      style={{
+        cursor: 'pointer',
+        borderBottom: isLast ? 'none' : '1px solid var(--border)',
+        transition: 'background 150ms ease',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '12px 16px',
+        }}
+      >
+        <span
+          className="font-mono"
+          style={{ fontSize: '11px', color: 'var(--text-secondary)', flexShrink: 0 }}
+        >
+          {formatTime(item.ts || item.timestamp)}
+        </span>
+        <span
+          style={{
+            flex: 1,
+            fontSize: '13px',
+            color: 'var(--text)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {summary}
+        </span>
+        <span
+          className="font-mono"
+          style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}
+        >
+          {toolCount}t · {totalTokens.toLocaleString()}
+        </span>
+        <span
+          style={{
+            fontSize: '14px',
+            color: 'var(--text-muted)',
+            flexShrink: 0,
+            width: '14px',
+            textAlign: 'center',
+          }}
+        >
+          {expanded ? '\uFF0D' : '\uFF0B'}
+        </span>
       </div>
 
-      {expanded && (
-        <div className="mt-2 pt-2 text-sm" style={{ borderTop: '1px solid var(--border)' }}>
+      <div
+        style={{
+          maxHeight: expanded ? '2000px' : '0px',
+          overflow: 'hidden',
+          transition: 'max-height 300ms ease-out',
+        }}
+      >
+        <div
+          className="text-sm"
+          style={{
+            padding: '0 16px 20px 16px',
+            borderTop: '1px solid var(--border)',
+            paddingTop: '12px',
+          }}
+        >
           {toolCount > 0 && (
             <div className="mb-2">
               <span style={{ color: 'var(--text-muted)' }}>工具: </span>
@@ -69,6 +114,18 @@ function HistoryItem({ item }) {
               <span className="font-mono text-xs">{rounds}</span>
             </div>
           )}
+
+          <div className="mb-2">
+            <span style={{ color: 'var(--text-muted)' }}>tokens: </span>
+            <span className="font-mono text-xs">
+              {inputTokens.toLocaleString()} IN / {outputTokens.toLocaleString()} OUT
+            </span>
+            {elapsed != null && (
+              <span className="font-mono text-xs" style={{ marginLeft: '12px', color: 'var(--text-muted)' }}>
+                {(elapsed / 1000).toFixed(1)}s
+              </span>
+            )}
+          </div>
 
           {palaceWrites && (
             <div className="mb-2">
@@ -101,7 +158,7 @@ function HistoryItem({ item }) {
                       bottom: 0,
                       height: '60px',
                       pointerEvents: 'none',
-                      background: 'linear-gradient(to bottom, rgba(0,0,0,0), var(--bg))',
+                      background: 'linear-gradient(to bottom, rgba(0,0,0,0), var(--bg-card))',
                     }}
                   />
                 )}
@@ -116,6 +173,7 @@ function HistoryItem({ item }) {
                     color: 'var(--accent)',
                     fontSize: '12px',
                     cursor: 'pointer',
+                    fontFamily: 'inherit',
                   }}
                 >
                   {thinkingExpanded ? '收起' : '展开全部'}
@@ -142,7 +200,7 @@ function HistoryItem({ item }) {
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -151,33 +209,46 @@ export default function HistoryList({ items, onRefresh, loading }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
           历史
         </span>
         <button
           onClick={(e) => { e.stopPropagation(); onRefresh() }}
           disabled={loading}
-          className="text-xs px-2 py-0.5 rounded"
           style={{
-            color: 'var(--accent)',
-            border: '1px solid var(--border)',
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            fontSize: '12px',
+            fontFamily: 'inherit',
+            color: 'var(--text-muted)',
+            cursor: loading ? 'default' : 'pointer',
             opacity: loading ? 0.5 : 1,
+            transition: 'color 150ms ease',
           }}
+          onMouseEnter={(e) => { if (!loading) e.currentTarget.style.color = 'var(--accent)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)' }}
         >
           {loading ? '...' : '刷新'}
         </button>
       </div>
-      <div className="flex flex-col gap-2">
-        {items.length === 0 ? (
-          <div className="card p-4 text-center">
-            <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              暂无历史记录
-            </span>
-          </div>
-        ) : (
-          items.map((item, i) => <HistoryItem key={item.id || i} item={item} />)
-        )}
-      </div>
+      {items.length === 0 ? (
+        <div className="card p-5 text-center">
+          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            暂无历史记录
+          </span>
+        </div>
+      ) : (
+        <div className="card">
+          {items.map((item, i) => (
+            <HistoryItem
+              key={item.id || i}
+              item={item}
+              isLast={i === items.length - 1}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

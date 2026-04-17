@@ -2,7 +2,7 @@ import { useState } from 'react'
 import useApi from '../../hooks/useApi'
 import useTelegram from '../../hooks/useTelegram'
 
-function DrawerItem({ drawer }) {
+function DrawerItem({ drawer, isLast }) {
   const [expanded, setExpanded] = useState(false)
   const preview = drawer.content_preview
     ? drawer.content_preview.slice(0, 200)
@@ -13,31 +13,47 @@ function DrawerItem({ drawer }) {
 
   return (
     <div
-      className="px-3 py-2 rounded-lg cursor-pointer"
-      style={{ background: 'rgba(255,255,255,0.3)' }}
       onClick={() => setExpanded(!expanded)}
+      style={{
+        cursor: 'pointer',
+        padding: '10px 16px 10px 32px',
+        borderBottom: isLast ? 'none' : '1px solid var(--border)',
+        transition: 'background 150ms ease',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
     >
       <div
         style={{
           color: 'var(--text-muted)',
-          fontSize: '0.8rem',
+          fontSize: '13px',
           lineHeight: 1.5,
           whiteSpace: 'pre-wrap',
         }}
       >
         {expanded ? full : preview}
       </div>
-      <div className="flex items-center gap-2 mt-1">
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {expanded ? '▾ 收起全文' : '▸ 查看全文'}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginTop: '6px',
+        }}
+      >
+        <span
+          className="font-mono"
+          style={{ fontSize: '11px', color: 'var(--text-secondary)' }}
+        >
+          {expanded ? '收起' : '展开'}
         </span>
         {type && (
-          <span className="text-xs font-mono" style={{ color: 'var(--accent-dim)' }}>
+          <span className="font-mono" style={{ fontSize: '11px', color: 'var(--accent-dim)' }}>
             {type}
           </span>
         )}
         {importance && (
-          <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>
+          <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
             imp:{importance}
           </span>
         )}
@@ -46,7 +62,7 @@ function DrawerItem({ drawer }) {
   )
 }
 
-function RoomItem({ wing, room }) {
+function RoomItem({ wing, room, isLast }) {
   const { initData } = useTelegram()
   const { get } = useApi(initData)
   const [expanded, setExpanded] = useState(false)
@@ -74,26 +90,56 @@ function RoomItem({ wing, room }) {
   }
 
   return (
-    <div>
+    <div
+      style={{
+        borderBottom: isLast ? 'none' : '1px solid var(--border)',
+      }}
+    >
       <div
-        className="flex items-center gap-2 px-3 py-2 cursor-pointer"
         onClick={handleClick}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 16px',
+          cursor: 'pointer',
+          transition: 'background 150ms ease',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {expanded ? '▾' : '▸'}
-        </span>
-        <span className="text-sm" style={{ color: 'var(--text)' }}>
+        <span style={{ fontSize: '13px', color: 'var(--text)' }}>
           {room}
+        </span>
+        <span
+          style={{
+            fontSize: '14px',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {expanded ? '\uFF0D' : '\uFF0B'}
         </span>
       </div>
       {expanded && (
-        <div className="pl-6 pr-2 pb-2 flex flex-col gap-1.5">
+        <div style={{ borderTop: '1px solid var(--border)' }}>
           {drawers.length === 0 ? (
-            <div className="text-xs px-3 py-1" style={{ color: 'var(--text-secondary)' }}>
+            <div
+              style={{
+                fontSize: '11px',
+                padding: '10px 16px',
+                color: 'var(--text-secondary)',
+              }}
+            >
               {loaded ? 'No drawers' : 'Loading...'}
             </div>
           ) : (
-            drawers.map((d, i) => <DrawerItem key={d.id || i} drawer={d} />)
+            drawers.map((d, i) => (
+              <DrawerItem
+                key={d.id || i}
+                drawer={d}
+                isLast={i === drawers.length - 1}
+              />
+            ))
           )}
         </div>
       )}
@@ -101,7 +147,7 @@ function RoomItem({ wing, room }) {
   )
 }
 
-function WingItem({ wing, isOpen, onToggle }) {
+function WingItem({ wing, isOpen, onToggle, isLast }) {
   const { initData } = useTelegram()
   const { get } = useApi(initData)
   const [rooms, setRooms] = useState([])
@@ -126,30 +172,56 @@ function WingItem({ wing, isOpen, onToggle }) {
   }
 
   return (
-    <div className="card">
+    <div
+      style={{
+        borderBottom: isLast ? 'none' : '1px solid var(--border)',
+      }}
+    >
       <div
-        className="flex items-center gap-2 px-4 py-3 cursor-pointer"
         onClick={handleClick}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '14px 16px',
+          cursor: 'pointer',
+          transition: 'background 150ms ease',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {isOpen ? '▾' : '▸'}
-        </span>
-        <span className="text-sm font-medium" style={{ color: 'var(--accent)' }}>
+        <span style={{ fontSize: '13px', color: 'var(--accent)' }}>
           {displayName}
+        </span>
+        <span
+          style={{
+            fontSize: '14px',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {isOpen ? '\uFF0D' : '\uFF0B'}
         </span>
       </div>
       {isOpen && (
-        <div
-          className="pb-2"
-          style={{ borderTop: '1px solid var(--border)' }}
-        >
+        <div style={{ borderTop: '1px solid var(--border)' }}>
           {rooms.length === 0 ? (
-            <div className="text-xs px-4 py-2" style={{ color: 'var(--text-secondary)' }}>
+            <div
+              style={{
+                fontSize: '11px',
+                padding: '10px 16px',
+                color: 'var(--text-secondary)',
+              }}
+            >
               {loaded ? 'No rooms' : 'Loading...'}
             </div>
           ) : (
             rooms.map((room, i) => (
-              <RoomItem key={room + i} wing={wing} room={room} />
+              <RoomItem
+                key={room + i}
+                wing={wing}
+                room={room}
+                isLast={i === rooms.length - 1}
+              />
             ))
           )}
         </div>
@@ -164,10 +236,10 @@ export default function WingBrowser({ wings }) {
   if (!wings || wings.length === 0) {
     return (
       <div>
-        <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
           Wings
         </span>
-        <div className="card p-4 mt-2 text-center">
+        <div className="card p-5 mt-2 text-center">
           <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
             No wings found
           </span>
@@ -178,16 +250,17 @@ export default function WingBrowser({ wings }) {
 
   return (
     <div>
-      <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
         Wings
       </span>
-      <div className="flex flex-col gap-2 mt-2">
-        {wings.map(wing => (
+      <div className="card" style={{ marginTop: '8px' }}>
+        {wings.map((wing, i) => (
           <WingItem
             key={wing}
             wing={wing}
             isOpen={openWing === wing}
             onToggle={() => setOpenWing(openWing === wing ? null : wing)}
+            isLast={i === wings.length - 1}
           />
         ))}
       </div>

@@ -31,13 +31,23 @@ function mergeStreamEvents(events) {
   return merged
 }
 
+function WaitingDots() {
+  return (
+    <span className="dots font-mono" style={{ color: 'var(--text-muted)' }}>
+      <span>·</span>
+      <span>·</span>
+      <span>·</span>
+    </span>
+  )
+}
+
 function EventLine({ event }) {
   const { type, data } = event
 
   if (type === 'processing') {
     return (
       <div className="flex items-start gap-2 py-1">
-        <span>⏳</span>
+        <WaitingDots />
         <span style={{ color: 'var(--text-muted)' }}>{data.message || data.step}</span>
       </div>
     )
@@ -74,7 +84,9 @@ function EventLine({ event }) {
   if (type === 'tool_call') {
     return (
       <div className="flex items-start gap-2 py-1">
-        <span>🔧</span>
+        <span style={{ color: 'var(--accent)', fontSize: '8px', lineHeight: '20px' }}>
+          {'\u25CB'}
+        </span>
         <span>
           <span className="font-mono text-sm" style={{ color: 'var(--accent)' }}>
             {data.tool}
@@ -91,9 +103,6 @@ function EventLine({ event }) {
     const success = data.success !== false
     return (
       <div className="flex items-start gap-2 py-0.5 pl-6">
-        <span style={{ color: success ? 'var(--success)' : 'var(--fail)' }}>
-          {success ? '✓' : '✗'}
-        </span>
         <span className="text-sm" style={{ color: success ? 'var(--success)' : 'var(--fail)' }}>
           {success ? '完成' : '失败'}
           {data.duration_ms != null && (
@@ -114,41 +123,67 @@ function StatCard({ stats }) {
   const toolCount = Array.isArray(stats.tools) ? stats.tools.length : (stats.tools ? 1 : 0)
 
   return (
-    <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
-      <div className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
-        ── 完成 ──
+    <div className="mt-3">
+      <div style={{ height: '1px', background: 'var(--border)' }} />
+      <div
+        className="text-xs"
+        style={{
+          color: 'var(--text-muted)',
+          textAlign: 'center',
+          padding: '8px 0',
+        }}
+      >
+        完成
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <div>
           <span style={{ color: 'var(--text-muted)' }}>输入: </span>
-          <span className="font-mono" style={{ color: 'var(--accent)' }}>
+          <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 400 }}>
             {stats.input_tokens?.toLocaleString()}
           </span>
         </div>
         <div>
           <span style={{ color: 'var(--text-muted)' }}>输出: </span>
-          <span className="font-mono" style={{ color: 'var(--accent)' }}>
+          <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 400 }}>
             {stats.output_tokens?.toLocaleString()}
           </span>
         </div>
         <div>
           <span style={{ color: 'var(--text-muted)' }}>工具: </span>
-          <span className="font-mono">{toolCount}次</span>
+          <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 400 }}>
+            {toolCount}
+          </span>
         </div>
         <div>
           <span style={{ color: 'var(--text-muted)' }}>耗时: </span>
-          <span className="font-mono">
+          <span className="font-mono" style={{ color: 'var(--accent)', fontWeight: 400 }}>
             {stats.elapsed_ms != null ? `${(stats.elapsed_ms / 1000).toFixed(1)}s` : '-'}
           </span>
         </div>
         {palaceWrites && (
           <div className="col-span-2">
             <span style={{ color: 'var(--text-muted)' }}>宫殿写入: </span>
-            <span className="font-mono text-sm">{palaceWrites}</span>
+            <span className="font-mono text-sm" style={{ color: 'var(--accent)', fontWeight: 400 }}>
+              {palaceWrites}
+            </span>
           </div>
         )}
       </div>
     </div>
+  )
+}
+
+function StatusDot({ connected }) {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: '4px',
+        height: '4px',
+        borderRadius: '1px',
+        background: connected ? 'var(--success)' : 'var(--fail)',
+      }}
+    />
   )
 }
 
@@ -164,30 +199,24 @@ export default function LiveProcess({ status, events, stats, connected }) {
 
   if (status === 'idle') {
     return (
-      <div className="card p-4">
+      <div className="card p-5">
         <div className="flex items-center justify-between">
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             等待消息...
           </p>
-          <span
-            className="w-2 h-2 rounded-full"
-            style={{ background: connected ? 'var(--success)' : 'var(--fail)' }}
-          />
+          <StatusDot connected={connected} />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="card p-4">
+    <div className="card p-5">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
           实时
         </span>
-        <span
-          className="w-2 h-2 rounded-full"
-          style={{ background: connected ? 'var(--success)' : 'var(--fail)' }}
-        />
+        <StatusDot connected={connected} />
       </div>
       <div ref={scrollRef} className="max-h-64 overflow-y-auto">
         {mergedEvents.map((event, i) => (
