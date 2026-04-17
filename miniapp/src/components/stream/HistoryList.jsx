@@ -6,8 +6,11 @@ function formatTime(ts) {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
+const THINKING_COLLAPSE_THRESHOLD = 500
+
 function HistoryItem({ item }) {
   const [expanded, setExpanded] = useState(false)
+  const [thinkingExpanded, setThinkingExpanded] = useState(false)
 
   const inputTokens = item.total_prompt_tokens ?? item.input_tokens ?? item.prompt_tokens ?? 0
   const outputTokens = item.total_completion_tokens ?? item.output_tokens ?? item.completion_tokens ?? 0
@@ -18,7 +21,9 @@ function HistoryItem({ item }) {
   const palaceWrites = typeof item.palace_writes === 'object'
     ? JSON.stringify(item.palace_writes)
     : item.palace_writes
-  const thinkingPreview = item.thinking_preview || ''
+  const thinkingPreview = item.thinking_text || item.thinking_preview || null
+  const thinkingNeedsCollapse = (thinkingPreview || '').length > THINKING_COLLAPSE_THRESHOLD
+  const thinkingCollapsed = thinkingNeedsCollapse && !thinkingExpanded
   const responsePreview = item.response_preview || ''
 
   return (
@@ -75,12 +80,47 @@ function HistoryItem({ item }) {
           {thinkingPreview && (
             <div className="mb-3">
               <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>思维链</div>
-              <div
-                className="text-xs leading-relaxed"
-                style={{ color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}
-              >
-                {thinkingPreview}
+              <div style={{ position: 'relative' }}>
+                <div
+                  className="text-xs leading-relaxed"
+                  style={{
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'pre-wrap',
+                    maxHeight: thinkingCollapsed ? '200px' : 'none',
+                    overflow: thinkingCollapsed ? 'hidden' : 'visible',
+                  }}
+                >
+                  {thinkingPreview}
+                </div>
+                {thinkingCollapsed && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: '60px',
+                      pointerEvents: 'none',
+                      background: 'linear-gradient(to bottom, rgba(0,0,0,0), var(--bg))',
+                    }}
+                  />
+                )}
               </div>
+              {thinkingNeedsCollapse && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setThinkingExpanded(!thinkingExpanded) }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: '4px 0 0 0',
+                    color: 'var(--accent)',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {thinkingExpanded ? '收起' : '展开全部'}
+                </button>
+              )}
             </div>
           )}
 
