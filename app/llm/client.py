@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,6 +58,112 @@ SYSTEM_PROMPT_FILE = OPS_DIR / "prompts" / "system.md"
 
 def _clean_text(value: str) -> str:
     return (value or "").strip()
+
+
+_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+
+
+def _split_reply_into_bubbles(
+    text: str,
+    max_len: int = 3800,
+    min_chunk_chars: int = 20,
+) -> list[str]:
+    """Split an LLM reply into multiple Telegram bubbles.
+
+    Rules:
+    1. Primary split on blank lines (\\n\\s*\\n).
+    2. Merge chunks shorter than ``min_chunk_chars`` into the previous chunk.
+    3. Further split chunks longer than ``max_len`` by single newlines, then
+       by sentence terminators, and finally by hard slicing.
+    4. Markdown fenced code blocks (```...```) stay intact.
+
+    Each returned string is stripped and guaranteed non-empty.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    placeholders: list[str] = []
+
+    def _stash(match: re.Match[str]) -> str:
+        placeholders.append(match.group(0))
+        return f"\x00FENCE{len(placeholders) - 1}\x00"
+
+    stashed = _FENCE_RE.sub(_stash, text)
+
+    raw_chunks = re.split(r"\n\s*\n", stashed)
+    raw_chunks = [c.strip() for c in raw_chunks if c.strip()]
+
+    def _restore(value: str) -> str:
+        def repl(match: re.Match[str]) -> str:
+            idx = int(match.group(1))
+            return placeholders[idx]
+
+        return re.sub(r"\x00FENCE(\d+)\x00", repl, value)
+
+    # Restore fences BEFORE measuring chunk length for the short-chunk merge,
+    # otherwise a standalone fenced code block (represented as a ~10 char
+    # placeholder) would always look shorter than ``min_chunk_chars`` and get
+    # merged into the previous bubble, potentially producing oversized bubbles
+    # whose later hard-split breaks fence boundaries across messages.
+    restored_chunks = [_restore(c) for c in raw_chunks]
+
+    merged: list[str] = []
+    for chunk in restored_chunks:
+        if merged and len(chunk) < min_chunk_chars:
+            merged[-1] = merged[-1] + "\n\n" + chunk
+        else:
+            merged.append(chunk)
+
+    restored = merged
+
+    _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。?!?!.])")
+
+    final: list[str] = []
+    for chunk in restored:
+        if len(chunk) <= max_len:
+            final.append(chunk)
+            continue
+
+        sub_parts = chunk.split("\n")
+        buf = ""
+        for part in sub_parts:
+            candidate = (buf + "\n" + part) if buf else part
+            if len(candidate) <= max_len:
+                buf = candidate
+                continue
+
+            if buf:
+                final.append(buf.strip())
+                buf = ""
+
+            if len(part) <= max_len:
+                buf = part
+                continue
+
+            # Part itself is too long — try sentence-level split, then hard slice.
+            sentence_buf = ""
+            for sentence in _SENTENCE_SPLIT_RE.split(part):
+                if not sentence:
+                    continue
+                cand2 = sentence_buf + sentence
+                if len(cand2) <= max_len:
+                    sentence_buf = cand2
+                    continue
+                if sentence_buf:
+                    final.append(sentence_buf.strip())
+                    sentence_buf = ""
+                if len(sentence) <= max_len:
+                    sentence_buf = sentence
+                else:
+                    for i in range(0, len(sentence), max_len):
+                        final.append(sentence[i : i + max_len])
+            if sentence_buf:
+                buf = sentence_buf
+        if buf:
+            final.append(buf.strip())
+
+    return [s for s in (p.strip() for p in final) if s]
 
 
 def _read_optional_text(path: Path) -> str:
@@ -204,9 +311,9 @@ def _append_recent_turns(messages: list[dict], recent_turns: list[Turn]) -> None
         past_assistant = _clean_text(past_assistant)
 
         if past_user:
-            messages.append({"role": "user", "content": past_user})
+            messages.append({"role": "user", "content": f"[朔夜] {past_user}"})
         if past_assistant:
-            messages.append({"role": "assistant", "content": past_assistant})
+            messages.append({"role": "assistant", "content": f"[辉夜] {past_assistant}"})
 
 
 def build_reply_messages(
@@ -228,7 +335,7 @@ def build_reply_messages(
     ]
 
     _append_recent_turns(messages, recent_turns)
-    messages.append({"role": "user", "content": _clean_text(user_text)})
+    messages.append({"role": "user", "content": f"[朔夜] {_clean_text(user_text)}"})
     return messages
 
 
@@ -627,7 +734,8 @@ def _run_tool_loop(
         if not streamed_reply or not streamed_reply.strip():
             raise RuntimeError("LLM returned empty content on final round")
 
-        result.reply_segments.append(streamed_reply)
+        bubbles = _split_reply_into_bubbles(streamed_reply)
+        result.reply_segments.extend(bubbles)
         result.reply_text = "\n\n".join(result.reply_segments)
 
         total_elapsed = int((time.monotonic() - loop_start) * 1000)
