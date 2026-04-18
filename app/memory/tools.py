@@ -72,11 +72,12 @@ def execute_tool(tool_name: str, arguments: str | None) -> str:
 
     # Wing prefix enforcement — only applies to mempalace_add_drawer.
     # Reject bare wings (without 'wing_' prefix) before touching the handler,
-    # to stop duplicate naked wings from being created.
+    # to stop duplicate naked wings from being created. Empty/missing wing
+    # is also rejected here.
     if tool_name == "mempalace_add_drawer":
-        wing = payload.get("wing", "")
-        if wing and not str(wing).startswith("wing_"):
-            _log_wing_rejection(tool_name, str(wing), "telegram")
+        wing = str(payload.get("wing", "") or "")
+        if not wing.startswith("wing_"):
+            _log_wing_rejection(tool_name, wing, "telegram")
             return (
                 f"ERROR: wing 参数必须以 'wing_' 前缀开头。"
                 f"你尝试写入 wing='{wing}'，这会在宫殿里创建一个裸 wing，"

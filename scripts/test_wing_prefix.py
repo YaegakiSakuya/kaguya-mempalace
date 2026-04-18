@@ -69,6 +69,38 @@ def main() -> int:
                 f"case 1: handler was invoked despite rejection: {calls}"
             )
 
+        # ── 1b. Empty wing should also be rejected ────────────────────
+        print("\n--- case 1b: wing='' (empty, should reject) ---")
+        calls.clear()
+        result = memtools.execute_tool(
+            "mempalace_add_drawer",
+            json.dumps(
+                {"wing": "", "room": "r", "title": "t", "content": "c"}
+            ),
+        )
+        print(f"returned: {result}")
+        if not result.startswith("ERROR: wing 参数必须以 'wing_' 前缀开头"):
+            failures.append("case 1b: error prefix mismatch")
+        if calls:
+            failures.append(
+                f"case 1b: handler was invoked despite empty wing: {calls}"
+            )
+
+        # ── 1c. Missing wing key should also be rejected ──────────────
+        print("\n--- case 1c: wing key missing, should reject ---")
+        calls.clear()
+        result = memtools.execute_tool(
+            "mempalace_add_drawer",
+            json.dumps({"room": "r", "title": "t", "content": "c"}),
+        )
+        print(f"returned: {result}")
+        if not result.startswith("ERROR: wing 参数必须以 'wing_' 前缀开头"):
+            failures.append("case 1c: error prefix mismatch")
+        if calls:
+            failures.append(
+                f"case 1c: handler was invoked despite missing wing: {calls}"
+            )
+
         # ── 2. Prefixed wing should pass the guard ────────────────────
         print("\n--- case 2: wing='wing_daily' (prefixed, should pass) ---")
         result = memtools.execute_tool(

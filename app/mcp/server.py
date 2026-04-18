@@ -107,11 +107,11 @@ def _make_wrapper(tool_name: str, handler: Any, required_fields: set[str]) -> An
         # Wing prefix enforcement — only applies to mempalace_add_drawer.
         # Reject bare wings (without 'wing_' prefix) before touching the
         # underlying ChromaDB handler, to stop duplicate naked wings from
-        # being created.
+        # being created. Empty/missing wing is also rejected here.
         if tool_name == "mempalace_add_drawer":
-            wing = kwargs.get("wing", "")
-            if wing and not str(wing).startswith("wing_"):
-                _log_wing_rejection(tool_name, str(wing), "mcp")
+            wing = str(kwargs.get("wing", "") or "")
+            if not wing.startswith("wing_"):
+                _log_wing_rejection(tool_name, wing, "mcp")
                 return (
                     f"ERROR: wing 参数必须以 'wing_' 前缀开头。"
                     f"你尝试写入 wing='{wing}'，这会在宫殿里创建一个裸 wing，"
