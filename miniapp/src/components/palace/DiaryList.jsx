@@ -60,25 +60,42 @@ function DiaryEntry({ entry, isLast }) {
   )
 }
 
+function DiaryHeader() {
+  return (
+    <div
+      className="font-mono"
+      style={{
+        padding: '12px 16px',
+        fontSize: '12px',
+        color: 'var(--accent)',
+        letterSpacing: '0.05em',
+        borderBottom: '1px solid var(--border)',
+      }}
+    >
+      DIARY · 辉夜日记
+    </div>
+  )
+}
+
 export default function DiaryList({ entries }) {
   return (
-    <div>
+    <div className="card">
+      <DiaryHeader />
       {!entries || entries.length === 0 ? (
-        <div className="card p-5 text-center">
-          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            no entries
-          </span>
+        <div
+          className="text-sm text-center"
+          style={{ padding: '20px', color: 'var(--text-muted)' }}
+        >
+          no entries
         </div>
       ) : (
-        <div className="card">
-          {entries.map((entry, i) => (
-            <DiaryEntry
-              key={entry.id || i}
-              entry={entry}
-              isLast={i === entries.length - 1}
-            />
-          ))}
-        </div>
+        entries.map((entry, i) => (
+          <DiaryEntry
+            key={entry.id || i}
+            entry={entry}
+            isLast={i === entries.length - 1}
+          />
+        ))
       )}
     </div>
   )
