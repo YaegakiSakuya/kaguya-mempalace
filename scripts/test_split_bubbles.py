@@ -89,6 +89,26 @@ def test_code_block_preserved() -> None:
     _assert(code_bubbles[0].count("```") == 2, "both fence markers in same bubble")
 
 
+def test_standalone_code_block_not_merged() -> None:
+    """Regression: a standalone fenced code block between two long paragraphs
+    should stay in its own bubble. The earlier implementation measured chunk
+    length on the stashed placeholder (~10 chars), so the code block always
+    merged into the previous paragraph."""
+    text = (
+        "这是代码前的足够长的引言段落，内容很长很长超过二十字符门槛没问题。\n\n"
+        "```python\n"
+        "def foo():\n"
+        "    return 1\n"
+        "```\n\n"
+        "这是代码后的足够长的说明段落，内容很长很长超过二十字符门槛没问题。"
+    )
+    result = _split_reply_into_bubbles(text)
+    _assert(len(result) == 3, f"code block stays in its own bubble (got {len(result)})")
+    _assert("```" not in result[0], "code fence not merged into leading paragraph")
+    _assert(result[1].startswith("```") and result[1].endswith("```"), "code block is the standalone middle bubble")
+    _assert("```" not in result[2], "code fence not in trailing paragraph")
+
+
 def test_long_paragraph_split() -> None:
     long_text = "a" * 5000
     result = _split_reply_into_bubbles(long_text)
@@ -113,6 +133,7 @@ def main() -> int:
         test_three_paragraphs,
         test_short_trailing_merged,
         test_code_block_preserved,
+        test_standalone_code_block_not_merged,
         test_long_paragraph_split,
         test_long_paragraph_with_sentences,
     ]

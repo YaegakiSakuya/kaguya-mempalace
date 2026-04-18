@@ -94,13 +94,6 @@ def _split_reply_into_bubbles(
     raw_chunks = re.split(r"\n\s*\n", stashed)
     raw_chunks = [c.strip() for c in raw_chunks if c.strip()]
 
-    merged: list[str] = []
-    for chunk in raw_chunks:
-        if merged and len(chunk) < min_chunk_chars:
-            merged[-1] = merged[-1] + "\n\n" + chunk
-        else:
-            merged.append(chunk)
-
     def _restore(value: str) -> str:
         def repl(match: re.Match[str]) -> str:
             idx = int(match.group(1))
@@ -108,7 +101,21 @@ def _split_reply_into_bubbles(
 
         return re.sub(r"\x00FENCE(\d+)\x00", repl, value)
 
-    restored = [_restore(c) for c in merged]
+    # Restore fences BEFORE measuring chunk length for the short-chunk merge,
+    # otherwise a standalone fenced code block (represented as a ~10 char
+    # placeholder) would always look shorter than ``min_chunk_chars`` and get
+    # merged into the previous bubble, potentially producing oversized bubbles
+    # whose later hard-split breaks fence boundaries across messages.
+    restored_chunks = [_restore(c) for c in raw_chunks]
+
+    merged: list[str] = []
+    for chunk in restored_chunks:
+        if merged and len(chunk) < min_chunk_chars:
+            merged[-1] = merged[-1] + "\n\n" + chunk
+        else:
+            merged.append(chunk)
+
+    restored = merged
 
     _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。?!?!.])")
 
