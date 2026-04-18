@@ -4,7 +4,30 @@ import useApi from '../hooks/useApi'
 import LLMConfigCard from '../components/palace/LLMConfigCard'
 import Overview from '../components/palace/Overview'
 import WingBrowser from '../components/palace/WingBrowser'
+import AllRoomsFlat from '../components/palace/AllRoomsFlat'
+import RecentDrawers from '../components/palace/RecentDrawers'
+import KGSummary from '../components/palace/KGSummary'
 import DiaryList from '../components/palace/DiaryList'
+
+function DrillDown({ selected, wings }) {
+  let content = null
+  if (selected === 'wings') content = <WingBrowser wings={wings} />
+  else if (selected === 'rooms') content = <AllRoomsFlat wings={wings} />
+  else if (selected === 'drawers') content = <RecentDrawers />
+  else if (selected === 'kg_entities') content = <KGSummary initialTab="entities" />
+  else if (selected === 'kg_triples') content = <KGSummary initialTab="triples" />
+
+  return (
+    <div
+      key={selected}
+      style={{
+        animation: 'drilldown-fade 200ms ease',
+      }}
+    >
+      {content}
+    </div>
+  )
+}
 
 export default function PalacePage() {
   const { initData } = useTelegram()
@@ -13,6 +36,7 @@ export default function PalacePage() {
   const [overview, setOverview] = useState(null)
   const [wings, setWings] = useState([])
   const [diary, setDiary] = useState([])
+  const [selected, setSelected] = useState('wings')
 
   useEffect(() => {
     const load = async () => {
@@ -35,9 +59,19 @@ export default function PalacePage() {
 
   return (
     <div className="px-4 pb-6 space-y-6">
+      <style>{`
+        @keyframes drilldown-fade {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      `}</style>
       <LLMConfigCard />
-      <Overview data={overview} />
-      <WingBrowser wings={wings} />
+      <Overview
+        data={overview}
+        selected={selected}
+        onSelect={setSelected}
+      />
+      <DrillDown selected={selected} wings={wings} />
       <DiaryList entries={diary} />
     </div>
   )
