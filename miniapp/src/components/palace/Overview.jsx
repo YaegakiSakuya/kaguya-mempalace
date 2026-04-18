@@ -1,14 +1,10 @@
-import useHaptic from '../../hooks/useHaptic'
-
-export default function Overview({ data, selected, onSelect }) {
-  const { impact } = useHaptic()
-
+export default function Overview({ data }) {
   const metrics = [
-    { label: 'Wings', key: 'wings' },
-    { label: 'Rooms', key: 'rooms' },
-    { label: 'Drawers', key: 'drawers' },
-    { label: 'KG Entities', key: 'kg_entities' },
-    { label: 'KG Triples', key: 'kg_triples' },
+    { label: 'drawers', key: 'drawers' },
+    { label: 'wings', key: 'wings' },
+    { label: 'rooms', key: 'rooms' },
+    { label: 'kg entities', key: 'kg_entities' },
+    { label: 'kg triples', key: 'kg_triples' },
   ]
 
   const formatValue = (val) => {
@@ -16,58 +12,56 @@ export default function Overview({ data, selected, onSelect }) {
     return Number(val).toLocaleString()
   }
 
-  const handleClick = (key) => {
-    impact('light')
-    onSelect?.(key)
-  }
-
   return (
-    <div className="card" style={{ paddingTop: '4px', paddingBottom: '4px' }}>
-      {metrics.map((m, idx) => {
-        const isActive = selected === m.key
-        return (
-          <div
-            key={m.key}
-            onClick={() => handleClick(m.key)}
+    <div
+      className="card"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'stretch',
+        padding: '4px 0',
+      }}
+    >
+      {metrics.map((m, idx) => (
+        <div
+          key={m.key}
+          style={{
+            flex: '1 1 20%',
+            minWidth: '64px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '10px 4px',
+            borderRight: idx < metrics.length - 1 ? '1px solid var(--border)' : 'none',
+          }}
+        >
+          <span
+            className="font-mono"
             style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-              padding: '12px 16px 12px 13px',
-              borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
-              borderBottom: idx === metrics.length - 1 ? 'none' : '1px solid var(--border)',
-              cursor: 'pointer',
-              background: isActive ? 'var(--bg-hover)' : 'transparent',
-              transition: 'background 150ms ease',
-            }}
-            onMouseEnter={(e) => {
-              if (!isActive) e.currentTarget.style.background = 'var(--bg-hover)'
-            }}
-            onMouseLeave={(e) => {
-              if (!isActive) e.currentTarget.style.background = 'transparent'
+              fontSize: '10px',
+              color: 'var(--text-muted)',
+              letterSpacing: '0.05em',
+              textAlign: 'center',
+              lineHeight: 1.3,
             }}
           >
-            <span
-              style={{
-                fontSize: '12px',
-                color: isActive ? 'var(--text)' : 'var(--text-muted)',
-              }}
-            >
-              {m.label}
-            </span>
-            <span
-              className="font-mono"
-              style={{
-                fontSize: '24px',
-                color: 'var(--accent)',
-                fontWeight: 400,
-              }}
-            >
-              {data ? formatValue(data[m.key]) : '\u2014'}
-            </span>
-          </div>
-        )
-      })}
+            {m.label}
+          </span>
+          <span
+            className="font-mono"
+            style={{
+              fontSize: '20px',
+              color: 'var(--accent)',
+              fontWeight: 400,
+              marginTop: '4px',
+              lineHeight: 1.2,
+            }}
+          >
+            {data ? formatValue(data[m.key]) : '\u2014'}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }

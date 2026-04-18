@@ -151,7 +151,7 @@ function RoomItem({ wing, room, isLast }) {
   )
 }
 
-function WingItem({ wing, isOpen, onToggle, isLast }) {
+function WingItem({ wing, roomsCount, drawersCount, isOpen, onToggle, isLast, readOnly }) {
   const { initData } = useTelegram()
   const { get } = useApi(initData)
   const { impact } = useHaptic()
@@ -159,6 +159,7 @@ function WingItem({ wing, isOpen, onToggle, isLast }) {
   const [loaded, setLoaded] = useState(false)
 
   const displayName = wing.replace(/^wing_/, '')
+  const nameColor = readOnly ? 'var(--text-muted)' : 'var(--accent)'
 
   const handleClick = async () => {
     impact('light')
@@ -177,6 +178,8 @@ function WingItem({ wing, isOpen, onToggle, isLast }) {
     }
   }
 
+  const hasCounts = Number.isFinite(roomsCount) && Number.isFinite(drawersCount)
+
   return (
     <div
       style={{
@@ -192,21 +195,51 @@ function WingItem({ wing, isOpen, onToggle, isLast }) {
           padding: '14px 16px',
           cursor: 'pointer',
           transition: 'background 150ms ease',
+          gap: '8px',
+          minWidth: 0,
         }}
         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
         onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
-        <span style={{ fontSize: '13px', color: 'var(--accent)' }}>
-          {displayName}
-        </span>
         <span
           style={{
-            fontSize: '14px',
-            color: 'var(--text-muted)',
+            fontSize: '13px',
+            color: nameColor,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            minWidth: 0,
+            flex: 1,
           }}
         >
-          {isOpen ? '\uFF0D' : '\uFF0B'}
+          {displayName}
         </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          {readOnly && (
+            <span
+              className="font-mono"
+              style={{ fontSize: '10px', color: 'var(--text-secondary)', letterSpacing: '0.05em' }}
+            >
+              read-only
+            </span>
+          )}
+          {hasCounts && (
+            <span
+              className="font-mono"
+              style={{ fontSize: '11px', color: 'var(--text-secondary)' }}
+            >
+              {roomsCount} / {drawersCount}
+            </span>
+          )}
+          <span
+            style={{
+              fontSize: '14px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            {isOpen ? '\uFF0D' : '\uFF0B'}
+          </span>
+        </div>
       </div>
       {isOpen && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
@@ -236,14 +269,14 @@ function WingItem({ wing, isOpen, onToggle, isLast }) {
   )
 }
 
-export default function WingBrowser({ wings }) {
+export default function WingBrowser({ wings, readOnly = false, emptyLabel = 'No wings found' }) {
   const [openWing, setOpenWing] = useState(null)
 
   if (!wings || wings.length === 0) {
     return (
       <div className="card p-5 text-center">
         <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          No wings found
+          {emptyLabel}
         </span>
       </div>
     )
@@ -251,15 +284,24 @@ export default function WingBrowser({ wings }) {
 
   return (
     <div className="card">
-      {wings.map((wing, i) => (
-        <WingItem
-          key={wing}
-          wing={wing}
-          isOpen={openWing === wing}
-          onToggle={() => setOpenWing(openWing === wing ? null : wing)}
-          isLast={i === wings.length - 1}
-        />
-      ))}
+      {wings.map((w, i) => {
+        const name = typeof w === 'string' ? w : (w?.name || '')
+        if (!name) return null
+        const roomsCount = typeof w === 'object' ? w.rooms_count : undefined
+        const drawersCount = typeof w === 'object' ? w.drawers_count : undefined
+        return (
+          <WingItem
+            key={name}
+            wing={name}
+            roomsCount={roomsCount}
+            drawersCount={drawersCount}
+            isOpen={openWing === name}
+            onToggle={() => setOpenWing(openWing === name ? null : name)}
+            isLast={i === wings.length - 1}
+            readOnly={readOnly}
+          />
+        )
+      })}
     </div>
   )
 }
