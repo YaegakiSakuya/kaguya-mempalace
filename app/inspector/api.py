@@ -501,7 +501,123 @@ def create_inspector_app(settings: Settings) -> FastAPI:
 
     @app.get("/miniapp/palace/wings", dependencies=miniapp_auth)
     async def miniapp_palace_wings():
-        return await list_wings()
+        """Return wings enriched with per-wing rooms_count and drawers_count."""
+        try:
+            from mempalace.mcp_server import TOOLS
+            wings_raw = _parse_tool_result(TOOLS["mempalace_list_wings"]["handler"]())
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+        if isinstance(wings_raw, dict):
+            wing_list = wings_raw.get("wings") or list(wings_raw.keys())
+        else:
+            wing_list = wings_raw or []
+
+        names: list[str] = []
+        for w in wing_list:
+            if isinstance(w, str):
+                names.append(w)
+            elif isinstance(w, dict):
+                n = w.get("name") or w.get("wing")
+                if n:
+                    names.append(n)
+
+        col = _get_collection(settings)
+
+        enriched: list[dict[str, Any]] = []
+        for name in names:
+            rooms_count = 0
+            drawers_count = 0
+            try:
+                from mempalace.mcp_server import TOOLS
+                rooms_raw = _parse_tool_result(TOOLS["mempalace_list_rooms"]["handler"](wing=name))
+                if isinstance(rooms_raw, list):
+                    rooms_count = len(rooms_raw)
+                elif isinstance(rooms_raw, dict):
+                    rlist = rooms_raw.get("rooms", [])
+                    rooms_count = len(rlist) if isinstance(rlist, list) else 0
+            except Exception:
+                pass
+            if col is not None:
+                try:
+                    data = col.get(where={"wing": name}, include=[])
+                    drawers_count = len(data.get("ids") or [])
+                except Exception:
+                    pass
+            enriched.append({
+                "name": name,
+                "rooms_count": rooms_count,
+                "drawers_count": drawers_count,
+            })
+
+        return {"wings": enriched}
+
+    @app.get("/miniapp/palace/search", dependencies=miniapp_auth)
+    async def miniapp_palace_search(
+        q: str = Query(...),
+        limit: int = Query(default=10, le=50),
+    ):
+        return await search(q=q, limit=limit, wing="")
+
+    @app.get("/miniapp/palace/wing-activity", dependencies=miniapp_auth)
+    async def miniapp_palace_wing_activity(days: int = Query(default=7, ge=1, le=30)):
+        """Aggregate mempalace_add_drawer calls in the last N days, grouped by wing."""
+        from datetime import datetime, timedelta, timezone
+
+        items = read_jsonl_tail(settings.logs_dir / "tool_calls.jsonl", 2000)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        counts: dict[str, int] = {}
+        for it in items:
+            if it.get("tool_name") != "mempalace_add_drawer":
+                continue
+            if it.get("success") is False:
+                continue
+            ts_str = it.get("ts") or it.get("timestamp")
+            if not ts_str:
+                continue
+            try:
+                ts = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if ts < cutoff:
+                continue
+            args = it.get("arguments") or it.get("args") or {}
+            wing = args.get("wing") if isinstance(args, dict) else None
+            if not wing:
+                continue
+            counts[wing] = counts.get(wing, 0) + 1
+
+        activity = [{"wing": k, "count": v} for k, v in sorted(counts.items(), key=lambda x: -x[1])]
+        return {"days": days, "activity": activity}
+
+    @app.get("/miniapp/palace/kg/timeline", dependencies=miniapp_auth)
+    async def miniapp_palace_kg_timeline(limit: int = Query(default=5, ge=1, le=50)):
+        try:
+            from mempalace.mcp_server import TOOLS
+            handler = TOOLS["mempalace_kg_timeline"]["handler"]
+            raw = handler()
+            parsed = _parse_tool_result(raw)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+        entities: list[dict[str, Any]] = []
+        triples: list[dict[str, Any]] = []
+
+        if isinstance(parsed, dict):
+            ent = parsed.get("entities") or parsed.get("new_entities") or []
+            trp = parsed.get("triples") or parsed.get("facts") or parsed.get("new_facts") or []
+            if isinstance(ent, list):
+                entities = ent
+            if isinstance(trp, list):
+                triples = trp
+        elif isinstance(parsed, list):
+            triples = parsed
+
+        return {
+            "entities": entities[:limit],
+            "triples": triples[:limit],
+        }
 
     @app.get("/miniapp/palace/rooms", dependencies=miniapp_auth)
     async def miniapp_palace_rooms(wing: str = Query(...)):
