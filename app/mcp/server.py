@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -31,6 +32,9 @@ _palace_path = Path(
 ).resolve()
 
 os.environ["MEMPALACE_PALACE_PATH"] = str(_palace_path)
+
+_logs_dir = _base_dir / "runtime" / "logs"
+_wing_reject_log = _logs_dir / "wing_prefix_rejections.jsonl"
 
 logger.info("Palace path: %s", _palace_path)
 
@@ -80,10 +84,40 @@ def _build_arg_model(tool_name: str, schema: dict[str, Any]) -> type[ArgModelBas
     )
 
 
-def _make_wrapper(handler: Any, required_fields: set[str]) -> Any:
+def _log_wing_rejection(tool_name: str, wing: str, source: str) -> None:
+    """Append a JSONL record when a bare-wing write is rejected."""
+    try:
+        _logs_dir.mkdir(parents=True, exist_ok=True)
+        record = {
+            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "tool": tool_name,
+            "wing": wing,
+            "source": source,
+        }
+        with _wing_reject_log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:  # pragma: no cover — logging must never break the call
+        logger.exception("Failed to log wing prefix rejection")
+
+
+def _make_wrapper(tool_name: str, handler: Any, required_fields: set[str]) -> Any:
     """Wrap a mempalace handler to strip None optional args and normalise output."""
 
     def wrapper(**kwargs: Any) -> str:
+        # Wing prefix enforcement — only applies to mempalace_add_drawer.
+        # Reject bare wings (without 'wing_' prefix) before touching the
+        # underlying ChromaDB handler, to stop duplicate naked wings from
+        # being created.
+        if tool_name == "mempalace_add_drawer":
+            wing = kwargs.get("wing", "")
+            if wing and not str(wing).startswith("wing_"):
+                _log_wing_rejection(tool_name, str(wing), "mcp")
+                return (
+                    f"ERROR: wing 参数必须以 'wing_' 前缀开头。"
+                    f"你尝试写入 wing='{wing}'，这会在宫殿里创建一个裸 wing，"
+                    f"破坏命名规范。请改用 wing='wing_{wing}' 重试。"
+                )
+
         # Remove None values for optional params so handlers that use
         # **kwargs don't receive unexpected None arguments.
         cleaned = {
@@ -133,7 +167,7 @@ for _name, _spec in TOOLS.items():
     _input_schema = _spec.get("input_schema", {"type": "object", "properties": {}})
     _required = set(_input_schema.get("required", []))
 
-    _wrapper = _make_wrapper(_handler, _required)
+    _wrapper = _make_wrapper(_name, _handler, _required)
     _wrapper.__name__ = _name
     _wrapper.__doc__ = _description
 
