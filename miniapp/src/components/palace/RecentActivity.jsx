@@ -39,15 +39,22 @@ function formatHHMM(ts) {
   return `${hh}:${mm}`
 }
 
+function itemArgs(item) {
+  return item.arguments_summary || item.arguments || item.args || {}
+}
+
 function extractPreview(item) {
-  const args = item.arguments || item.args || {}
+  const args = itemArgs(item)
   if (!args || typeof args !== 'object') return ''
   const tool = item.tool_name
   if (tool === 'mempalace_search' || tool === 'mempalace_kg_query') {
     return (args.query || args.entity || '').toString()
   }
   if (tool === 'mempalace_add_drawer') {
-    return (args.content_summary || args.content || args.type || '').toString()
+    // arguments_summary drops content; fall back to type/importance for context
+    const type = args.type ? String(args.type) : ''
+    const imp = args.importance != null ? `imp:${args.importance}` : ''
+    return (args.content_summary || args.content || [type, imp].filter(Boolean).join(' · ') || '').toString()
   }
   if (tool === 'mempalace_kg_add') {
     const s = args.subject || ''
@@ -56,7 +63,7 @@ function extractPreview(item) {
     return [s, p, o].filter(Boolean).join(' → ')
   }
   if (tool === 'mempalace_diary_write') {
-    return (args.content || args.entry || '').toString()
+    return (args.content || args.entry || args.agent_name || '').toString()
   }
   // fallback: first string-ish value
   for (const v of Object.values(args)) {
@@ -67,7 +74,7 @@ function extractPreview(item) {
 
 function ActivityRow({ item, isLast }) {
   const tool = item.tool_name
-  const args = item.arguments || item.args || {}
+  const args = itemArgs(item)
   const rawWing = (args && typeof args === 'object' && args.wing) ? String(args.wing) : ''
   const rawRoom = (args && typeof args === 'object' && args.room) ? String(args.room) : ''
   const wing = rawWing.replace(/^wing_/, '')

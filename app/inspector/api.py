@@ -534,8 +534,9 @@ def create_inspector_app(settings: Settings) -> FastAPI:
                 if isinstance(rooms_raw, list):
                     rooms_count = len(rooms_raw)
                 elif isinstance(rooms_raw, dict):
-                    rlist = rooms_raw.get("rooms", [])
-                    rooms_count = len(rlist) if isinstance(rlist, list) else 0
+                    rlist = rooms_raw.get("rooms")
+                    if isinstance(rlist, (list, dict)):
+                        rooms_count = len(rlist)
             except Exception:
                 pass
             if col is not None:
@@ -582,7 +583,12 @@ def create_inspector_app(settings: Settings) -> FastAPI:
                 continue
             if ts < cutoff:
                 continue
-            args = it.get("arguments") or it.get("args") or {}
+            args = (
+                it.get("arguments_summary")
+                or it.get("arguments")
+                or it.get("args")
+                or {}
+            )
             wing = args.get("wing") if isinstance(args, dict) else None
             if not wing:
                 continue
