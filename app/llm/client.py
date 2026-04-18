@@ -734,8 +734,7 @@ def _run_tool_loop(
         if not streamed_reply or not streamed_reply.strip():
             raise RuntimeError("LLM returned empty content on final round")
 
-        bubbles = _split_reply_into_bubbles(streamed_reply)
-        result.reply_segments.extend(bubbles)
+        result.reply_segments.append(streamed_reply)
         result.reply_text = "\n\n".join(result.reply_segments)
 
         total_elapsed = int((time.monotonic() - loop_start) * 1000)
