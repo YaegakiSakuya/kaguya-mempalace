@@ -734,7 +734,12 @@ def _run_tool_loop(
         if not streamed_reply or not streamed_reply.strip():
             raise RuntimeError("LLM returned empty content on final round")
 
-        result.reply_segments.append(streamed_reply)
+        # Single-bubble UX by default; fall back to splitter only when the
+        # reply would exceed Telegram's per-message limit (~4096 chars).
+        if len(streamed_reply) <= 3800:
+            result.reply_segments.append(streamed_reply)
+        else:
+            result.reply_segments.extend(_split_reply_into_bubbles(streamed_reply))
         result.reply_text = "\n\n".join(result.reply_segments)
 
         total_elapsed = int((time.monotonic() - loop_start) * 1000)
