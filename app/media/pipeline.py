@@ -76,12 +76,38 @@ def ingest_image(
     existing = media_client.find_image_by_sha256(sha)
     vision_failed = False
 
-    if existing is not None:
+    if existing is not None and existing.vl_description:
+        # 真命中:描述齐全,直接复用
         logger.info("image dedup hit: sha256=%s id=%s", sha[:12], existing.id)
         image = existing
         is_new = False
+
+    elif existing is not None:
+        # 有记录但 vl_description 为空 —— 这是上一次 VL 失败留下的坏记录
+        # 不能让坏记录毒化 dedup cache,重新跑 VL 并 update 这条记录
+        logger.info("image record %s has empty vl_description, retrying VL", existing.id)
+        try:
+            analysis = vision_agent.analyze(
+                compressed.data,
+                compressed.mime_type,
+                user_hint=caption,
+            )
+            updated = media_client.update_image_description(
+                existing.id,
+                vl_description=analysis.description,
+                vl_model=analysis.model,
+                ocr_text=analysis.ocr_text or None,
+            )
+            image = updated if updated is not None else existing
+            logger.info("image %s VL retry succeeded", existing.id)
+        except VisionError:
+            logger.exception("VL retry failed, reusing existing record without description")
+            vision_failed = True
+            image = existing
+        is_new = True  # 本次触发了真实 VL 调用,不算 dedup 命中
+
     else:
-        # 3. 新图:落盘
+        # 3. 全新图:落盘
         relative = build_relative_path(
             chat_id=telegram_chat_id,
             sha256_hex=sha,

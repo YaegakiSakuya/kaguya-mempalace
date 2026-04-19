@@ -47,7 +47,7 @@ class VisionAgent:
         api_key: str,
         base_url: str,
         model: str,
-        timeout: float = 60.0,
+        timeout: float = 90.0,
         max_tokens: int = 800,
     ) -> None:
         if not api_key:
