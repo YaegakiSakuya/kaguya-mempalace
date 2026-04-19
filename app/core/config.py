@@ -39,6 +39,7 @@ class Settings:
     siliconflow_api_key: str
     siliconflow_base_url: str
     vl_model: str
+    tavily_api_key: str
 
 
 def load_settings() -> Settings:
@@ -68,6 +69,7 @@ def load_settings() -> Settings:
         siliconflow_api_key=os.getenv("SILICONFLOW_API_KEY", "").strip(),
         siliconflow_base_url=os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1").strip(),
         vl_model=os.getenv("VL_MODEL", "Qwen/Qwen3-VL-235B-A22B-Instruct").strip(),
+        tavily_api_key=os.getenv("TAVILY_API_KEY", "").strip(),
     )
 
     required = {

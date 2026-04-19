@@ -18,6 +18,11 @@ from app.llm.ops_tools import (
     execute_ops_tool,
     OPS_TOOL_NAMES,
 )
+from app.llm.web_tools import (
+    build_web_openai_tools,
+    execute_web_tool,
+    WEB_TOOL_NAMES,
+)
 from app.memory.palace import load_recent_diary
 from app.memory.tools import OPENAI_TOOLS, execute_tool
 from app.miniapp.sse import sse_manager
@@ -608,7 +613,7 @@ def _run_tool_loop(
 
     result = ToolLoopResult(reply_text="")
 
-    all_tools = OPENAI_TOOLS + build_ops_openai_tools()
+    all_tools = OPENAI_TOOLS + build_ops_openai_tools() + build_web_openai_tools()
 
     loop_start = time.monotonic()
 
@@ -700,6 +705,8 @@ def _run_tool_loop(
                 try:
                     if tool_name in OPS_TOOL_NAMES:
                         tool_result = execute_ops_tool(tool_name)
+                    elif tool_name in WEB_TOOL_NAMES:
+                        tool_result = execute_web_tool(tool_name, args_dict)
                     else:
                         tool_result = execute_tool(
                             tool_name=tool_name,
