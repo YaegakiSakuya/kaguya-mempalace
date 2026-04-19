@@ -36,6 +36,9 @@ class Settings:
     kaguya_media_url: str
     kaguya_media_service_key: str
     media_uploads_dir: Path
+    siliconflow_api_key: str
+    siliconflow_base_url: str
+    vl_model: str
 
 
 def load_settings() -> Settings:
@@ -62,6 +65,9 @@ def load_settings() -> Settings:
         kaguya_media_url=os.getenv("KAGUYA_MEDIA_URL", "").strip(),
         kaguya_media_service_key=os.getenv("KAGUYA_MEDIA_SERVICE_KEY", "").strip(),
         media_uploads_dir=Path(os.getenv("MEDIA_UPLOADS_DIR", str(base_dir / "runtime" / "uploads"))).resolve(),
+        siliconflow_api_key=os.getenv("SILICONFLOW_API_KEY", "").strip(),
+        siliconflow_base_url=os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1").strip(),
+        vl_model=os.getenv("VL_MODEL", "Qwen/Qwen3-VL-235B-A22B-Instruct").strip(),
     )
 
     required = {
