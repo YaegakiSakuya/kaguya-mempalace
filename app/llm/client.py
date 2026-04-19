@@ -18,6 +18,7 @@ from app.llm.ops_tools import (
     execute_ops_tool,
     OPS_TOOL_NAMES,
 )
+from app.memory.palace import load_recent_diary
 from app.memory.tools import OPENAI_TOOLS, execute_tool
 from app.miniapp.sse import sse_manager
 
@@ -259,6 +260,39 @@ def _base_system_sections(settings: Settings, wakeup_text: str) -> list[str]:
             _clean_text(wakeup_text),
         ]
     )
+
+    # ─────────────────────────────────────────────────────────────────
+    # L2 Memory Horizon — last 6 diary entries as atmospheric continuity.
+    #
+    # Layering law: DNA (system/writing/core) always leads. Operational
+    # runtime layers (wakeup + this horizon) come after. Do NOT insert
+    # this between the DNA sections or before wakeup. The time spectrum
+    # is: permanent manual → recent impressions → live conversation.
+    #
+    # This layer is explicitly told not to dictate tone/topic — it is
+    # background, not agenda. The live user message and recent turns
+    # win every contradiction.
+    # ─────────────────────────────────────────────────────────────────
+    diary_horizon = load_recent_diary(n=6)
+    if diary_horizon:
+        sections.extend(
+            [
+                "=== RECENT MEMORY HORIZON ===",
+                (
+                    "Below are the last 6 diary entries — compressed AAAK "
+                    "impressions from past checkpoints. They exist to give you "
+                    "a sense of emotional continuity across days, not to "
+                    "dictate the current turn's tone or topic. The current user "
+                    "message and the recent verbatim turns determine what this "
+                    "reply should be about; this horizon is atmosphere, not "
+                    "agenda. If a horizon entry's theme contradicts the live "
+                    "conversation, trust the live conversation. For precise "
+                    "facts, query the palace with mempalace_search or "
+                    "mempalace_kg_query."
+                ),
+                diary_horizon,
+            ]
+        )
 
     return sections
 
