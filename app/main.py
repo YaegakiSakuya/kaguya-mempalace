@@ -13,6 +13,7 @@ from telegram.ext import Application, ApplicationBuilder, CommandHandler, Contex
 from app.core.config import Settings, load_settings
 from app.inspector.logger import append_jsonl, _now_iso
 from app.llm.client import ToolLoopResult, generate_reply, run_memory_checkpoint
+from app.media import IngestResult, MediaClient, VisionAgent, ingest_image
 from app.memory.palace import mine_conversations, read_wakeup, refresh_wakeup
 from app.memory.state import increment_message_count, reset_message_count
 from app.memory.transcript import append_turn, load_recent_turns
@@ -219,10 +220,158 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("Something went wrong while handling your message.")
 
 
+async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 TG 图片消息:下载 → 视觉代理流水线 → 把 context_block 当作 user_text 走常规对话流程。
+
+    与 text_message 结构对称,差异只在最前面的"造 user_text"那一段。
+    """
+    settings: Settings = context.application.bot_data["settings"]
+    bootstrapped_chats: set[str] = context.application.bot_data["bootstrapped_chats"]
+    media_client: MediaClient | None = context.application.bot_data.get("media_client")
+    vision_agent: VisionAgent | None = context.application.bot_data.get("vision_agent")
+
+    if not update.effective_chat or not update.message or not update.message.photo:
+        return
+
+    chat_id = str(update.effective_chat.id)
+    if not is_allowed_chat(settings, chat_id):
+        await update.message.reply_text("This chat is not allowed.")
+        return
+
+    if media_client is None or vision_agent is None:
+        await update.message.reply_text("图片处理功能未启用(media pipeline 未就绪)。")
+        return
+
+    # TG photo 是一个多尺寸数组,最后一个是原始最高分辨率
+    photo = update.message.photo[-1]
+    caption = (update.message.caption or "").strip() or None
+    user_id = update.effective_user.id if update.effective_user else 0
+    message_id = update.message.message_id
+
+    force_status_bootstrap = chat_id not in bootstrapped_chats
+
+    try:
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+
+        # 1) 从 TG 下载原图
+        tg_file = await photo.get_file()
+        raw_bytes = bytes(await tg_file.download_as_bytearray())
+        logger.info("photo downloaded chat_id=%s message_id=%s bytes=%d",
+                    chat_id, message_id, len(raw_bytes))
+
+        # 2) 走视觉代理流水线(压缩 → sha256 去重 → 落盘 → VL → 入库 → 挂消息)
+        ingest_result: IngestResult = await asyncio.to_thread(
+            ingest_image,
+            raw_bytes=raw_bytes,
+            telegram_chat_id=update.effective_chat.id,
+            telegram_message_id=message_id,
+            user_id=user_id,
+            caption=caption,
+            uploads_root=settings.media_uploads_dir,
+            media_client=media_client,
+            vision_agent=vision_agent,
+        )
+        logger.info("photo ingested chat_id=%s image_id=%s is_new=%s vision_failed=%s",
+                    chat_id, ingest_result.image.id, ingest_result.is_new,
+                    ingest_result.vision_failed)
+
+        # 3) 把 context_block 当作等效的 user_text,走和 text_message 一样的剩下流程
+        user_text_equiv = ingest_result.context_block
+
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+
+        recent_turns = await asyncio.to_thread(
+            load_recent_turns,
+            settings.chats_dir,
+            chat_id,
+            settings.recent_turns,
+        )
+        wakeup_text = await asyncio.to_thread(read_wakeup, settings)
+
+        loop_result = await asyncio.to_thread(
+            generate_reply,
+            settings,
+            wakeup_text,
+            "",
+            recent_turns,
+            user_text_equiv,
+            6,
+            force_status_bootstrap,
+            chat_id,
+        )
+        assistant_text = loop_result.reply_text
+
+        segments = loop_result.reply_segments or [assistant_text]
+        for idx, segment in enumerate(segments):
+            if not segment or not segment.strip():
+                continue
+            if idx > 0:
+                await context.bot.send_chat_action(
+                    chat_id=update.effective_chat.id,
+                    action=ChatAction.TYPING,
+                )
+                await asyncio.sleep(0.4)
+            await update.message.reply_text(segment)
+
+        await asyncio.to_thread(
+            append_turn,
+            settings.chats_dir,
+            chat_id,
+            user_text_equiv,
+            assistant_text,
+        )
+
+        _write_turn_summary(settings.logs_dir, loop_result, "reply", chat_id)
+
+        bootstrapped_chats.add(chat_id)
+
+        count = await asyncio.to_thread(
+            increment_message_count,
+            settings.state_dir,
+            chat_id,
+        )
+
+        logger.info(
+            "handled photo chat_id=%s count=%s bootstrap=%s",
+            chat_id,
+            count,
+            force_status_bootstrap,
+        )
+
+        if count >= settings.autosave_user_message_interval:
+            context.application.create_task(run_autosave(context.application, settings, chat_id))
+
+    except Exception:
+        logger.exception("photo handling failed for chat_id=%s", chat_id)
+        await update.message.reply_text("处理图片时出了点问题,稍后再试。")
+
+
 async def post_init(application: Application) -> None:
     settings: Settings = application.bot_data["settings"]
     application.bot_data["autosave_lock"] = asyncio.Lock()
     application.bot_data["bootstrapped_chats"] = set()
+
+    # 初始化视觉代理相关的长连接组件(只在 SILICONFLOW_API_KEY 和 KAGUYA_MEDIA_* 都配齐时启用)
+    if settings.kaguya_media_url and settings.kaguya_media_service_key and settings.siliconflow_api_key:
+        try:
+            application.bot_data["media_client"] = MediaClient(
+                url=settings.kaguya_media_url,
+                service_key=settings.kaguya_media_service_key,
+            )
+            application.bot_data["vision_agent"] = VisionAgent(
+                api_key=settings.siliconflow_api_key,
+                base_url=settings.siliconflow_base_url,
+                model=settings.vl_model,
+            )
+            logger.info("media pipeline ready: vl_model=%s", settings.vl_model)
+        except Exception:
+            logger.exception("media pipeline init failed — photo messages will be declined")
+            application.bot_data["media_client"] = None
+            application.bot_data["vision_agent"] = None
+    else:
+        logger.info("media pipeline disabled (env not fully set)")
+        application.bot_data["media_client"] = None
+        application.bot_data["vision_agent"] = None
 
     try:
         await asyncio.to_thread(refresh_wakeup, settings)
@@ -233,6 +382,14 @@ async def post_init(application: Application) -> None:
 
 async def post_shutdown(application: Application) -> None:
     settings: Settings = application.bot_data["settings"]
+
+    # 关闭 media_client 的 httpx 连接池
+    media_client = application.bot_data.get("media_client")
+    if media_client is not None:
+        try:
+            media_client.close()
+        except Exception:
+            logger.exception("media_client close failed")
 
     try:
         if has_any_transcripts(settings):
@@ -256,6 +413,7 @@ def build_application(settings: Settings) -> Application:
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message))
+    app.add_handler(MessageHandler(filters.PHOTO & ~filters.COMMAND, photo_message))
 
     return app
 
