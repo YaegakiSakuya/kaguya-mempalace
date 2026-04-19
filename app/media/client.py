@@ -41,6 +41,42 @@ class ImageRecord:
         )
 
 
+
+@dataclass(frozen=True)
+class VoiceRecord:
+    id: str
+    chat_id: str
+    direction: str
+    text: Optional[str]
+    voice_id: Optional[str]
+    tts_model: Optional[str]
+    asr_model: Optional[str]
+    file_path: str
+    mime_type: str
+    size_bytes: int
+    duration_ms: int
+    telegram_message_id: Optional[int]
+    created_at: str
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "VoiceRecord":
+        return cls(
+            id=row["id"],
+            chat_id=row["chat_id"],
+            direction=row["direction"],
+            text=row.get("text"),
+            voice_id=row.get("voice_id"),
+            tts_model=row.get("tts_model"),
+            asr_model=row.get("asr_model"),
+            file_path=row["file_path"],
+            mime_type=row["mime_type"],
+            size_bytes=row["size_bytes"],
+            duration_ms=row["duration_ms"],
+            telegram_message_id=row.get("telegram_message_id"),
+            created_at=row["created_at"],
+        )
+
+
 @dataclass(frozen=True)
 class MessageImageRecord:
     id: str
@@ -219,3 +255,38 @@ class MediaClient:
         )
         resp.raise_for_status()
         return [MessageImageRecord.from_row(r) for r in resp.json()]
+
+    def insert_voice(
+        self,
+        *,
+        chat_id: str,
+        direction: str,
+        file_path: str,
+        mime_type: str,
+        size_bytes: int,
+        duration_ms: int = 0,
+        text: Optional[str] = None,
+        voice_id: Optional[str] = None,
+        tts_model: Optional[str] = None,
+        asr_model: Optional[str] = None,
+        telegram_message_id: Optional[int] = None,
+    ) -> VoiceRecord:
+        payload = {
+            "chat_id": chat_id,
+            "direction": direction,
+            "text": text,
+            "voice_id": voice_id,
+            "tts_model": tts_model,
+            "asr_model": asr_model,
+            "file_path": file_path,
+            "mime_type": mime_type,
+            "size_bytes": size_bytes,
+            "duration_ms": duration_ms,
+            "telegram_message_id": telegram_message_id,
+        }
+        resp = self._client.post(f"{self._base}/voices", json=payload)
+        resp.raise_for_status()
+        rows = resp.json()
+        if not rows:
+            raise RuntimeError("insert_voice returned empty response")
+        return VoiceRecord.from_row(rows[0])

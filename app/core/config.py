@@ -40,6 +40,10 @@ class Settings:
     siliconflow_base_url: str
     vl_model: str
     tavily_api_key: str
+    minimax_api_key: str
+    minimax_group_id: str
+    minimax_voice_id_ja: str
+    minimax_voice_id_zh: str
 
 
 def load_settings() -> Settings:
@@ -70,6 +74,10 @@ def load_settings() -> Settings:
         siliconflow_base_url=os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1").strip(),
         vl_model=os.getenv("VL_MODEL", "Qwen/Qwen3-VL-235B-A22B-Instruct").strip(),
         tavily_api_key=os.getenv("TAVILY_API_KEY", "").strip(),
+        minimax_api_key=os.getenv("MINIMAX_API_KEY", "").strip(),
+        minimax_group_id=os.getenv("MINIMAX_GROUP_ID", "").strip(),
+        minimax_voice_id_ja=os.getenv("MINIMAX_VOICE_ID_JA", "").strip(),
+        minimax_voice_id_zh=os.getenv("MINIMAX_VOICE_ID_ZH", "").strip(),
     )
 
     required = {

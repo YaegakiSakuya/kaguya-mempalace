@@ -10,10 +10,13 @@ from telegram import Update
 from telegram.constants import ChatAction
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
+from io import BytesIO
+
 from app.core.config import Settings, load_settings
 from app.inspector.logger import append_jsonl, _now_iso
 from app.llm.client import ToolLoopResult, generate_reply, run_memory_checkpoint
 from app.media import IngestResult, MediaClient, VisionAgent, ingest_image
+from app.media.voice_queue import drain as drain_voice_queue
 from app.memory.palace import mine_conversations, read_wakeup, refresh_wakeup
 from app.memory.state import increment_message_count, reset_message_count
 from app.memory.transcript import append_turn, load_recent_turns
@@ -187,6 +190,47 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 await asyncio.sleep(0.4)
             await update.message.reply_text(segment)
 
+        voice_notes = drain_voice_queue(chat_id)
+        for voice_note in voice_notes:
+            try:
+                audio_stream = BytesIO(voice_note.audio)
+                audio_stream.name = "voice.mp3"
+                duration_secs = (
+                    max(1, voice_note.duration_ms // 1000)
+                    if voice_note.duration_ms
+                    else None
+                )
+                # caption: 语音气泡下方同时显示文字 (辉夜自己组的中日双语版本),
+                # 方便在 TG 无一键转写时一眼读到内容。fallback 到原文。
+                # TG voice caption 上限 1024 字符,兜底截断。
+                caption_text = voice_note.caption or voice_note.text or ""
+                if len(caption_text) > 1024:
+                    caption_text = caption_text[:1021] + "..."
+                await update.message.reply_voice(
+                    voice=audio_stream,
+                    duration=duration_secs,
+                    caption=caption_text or None,
+                )
+                logger.info(
+                    "voice sent chat_id=%s bytes=%d duration_ms=%d",
+                    chat_id, len(voice_note.audio), voice_note.duration_ms,
+                )
+            except Exception:
+                logger.exception(
+                    "failed to send voice note chat_id=%s text_len=%d",
+                    chat_id, len(voice_note.text),
+                )
+
+        # 把本轮所有语音的原文以 [语音] 标记缝进 assistant_text,
+        # 确保 chats transcript / turn_summary / mempalace 召回都能看见
+        # "她当时还用声音说了这一句",声音不再是一次性烟花。
+        if voice_notes:
+            voice_markers = "\n\n".join(
+                f"[语音] {n.text}" for n in voice_notes if n.text
+            )
+            if voice_markers:
+                assistant_text = f"{assistant_text}\n\n{voice_markers}".strip()
+
         await asyncio.to_thread(
             append_turn,
             settings.chats_dir,
@@ -312,6 +356,47 @@ async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 )
                 await asyncio.sleep(0.4)
             await update.message.reply_text(segment)
+
+        voice_notes = drain_voice_queue(chat_id)
+        for voice_note in voice_notes:
+            try:
+                audio_stream = BytesIO(voice_note.audio)
+                audio_stream.name = "voice.mp3"
+                duration_secs = (
+                    max(1, voice_note.duration_ms // 1000)
+                    if voice_note.duration_ms
+                    else None
+                )
+                # caption: 语音气泡下方同时显示文字 (辉夜自己组的中日双语版本),
+                # 方便在 TG 无一键转写时一眼读到内容。fallback 到原文。
+                # TG voice caption 上限 1024 字符,兜底截断。
+                caption_text = voice_note.caption or voice_note.text or ""
+                if len(caption_text) > 1024:
+                    caption_text = caption_text[:1021] + "..."
+                await update.message.reply_voice(
+                    voice=audio_stream,
+                    duration=duration_secs,
+                    caption=caption_text or None,
+                )
+                logger.info(
+                    "voice sent chat_id=%s bytes=%d duration_ms=%d",
+                    chat_id, len(voice_note.audio), voice_note.duration_ms,
+                )
+            except Exception:
+                logger.exception(
+                    "failed to send voice note chat_id=%s text_len=%d",
+                    chat_id, len(voice_note.text),
+                )
+
+        # 把本轮所有语音的原文以 [语音] 标记缝进 assistant_text,
+        # 确保 chats transcript / turn_summary / mempalace 召回都能看见
+        # "她当时还用声音说了这一句",声音不再是一次性烟花。
+        if voice_notes:
+            voice_markers = "\n\n".join(
+                f"[语音] {n.text}" for n in voice_notes if n.text
+            )
+            if voice_markers:
+                assistant_text = f"{assistant_text}\n\n{voice_markers}".strip()
 
         await asyncio.to_thread(
             append_turn,
