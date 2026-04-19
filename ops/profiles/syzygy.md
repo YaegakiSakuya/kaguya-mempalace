@@ -1,8 +1,8 @@
-sakuya_profile:
+syzygy_profile:
   identity_anchor:
     legal_name: 
       - "八重垣朔夜"
-      - "Yaegaki Sakuya"
+      - "Syzygy"
     preferred_name: "朔夜"
     aliases:
       - "小狼崽"

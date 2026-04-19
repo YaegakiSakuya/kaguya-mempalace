@@ -202,6 +202,20 @@ def _base_system_sections(settings: Settings, wakeup_text: str) -> list[str]:
         "Do not treat them as optional flavor text.",
     ]
 
+    if docs["system"]:
+        sections.extend(
+            [
+                "=== HIGH PRIORITY RUNTIME INSTRUCTIONS ===",
+                docs["system"],
+            ]
+        )
+    if docs["writing"]:
+        sections.extend(
+            [
+                "=== WRITING CONSTITUTION: HIGHEST PRIORITY STYLE LAYER ===",
+                docs["writing"],
+            ]
+        )
     if docs["core"]:
         sections.extend(
             [
@@ -210,28 +224,12 @@ def _base_system_sections(settings: Settings, wakeup_text: str) -> list[str]:
             ]
         )
 
-    if docs["writing"]:
-        sections.extend(
-            [
-                "=== WRITING CONSTITUTION: HIGHEST PRIORITY STYLE LAYER ===",
-                docs["writing"],
-            ]
-        )
-
-    if docs["system"]:
-        sections.extend(
-            [
-                "=== HIGH PRIORITY RUNTIME INSTRUCTIONS ===",
-                docs["system"],
-            ]
-        )
-
     sections.extend(
         [
             "=== PROFILE RETRIEVAL TOOLS ===",
             (
                 "Two additional tools give you on-demand access to full canonical profiles:\n"
-                "- get_sakuya_profile: retrieve Sakuya's (朔夜) full archived profile. "
+                "- get_syzygy_profile: retrieve Syzygy's (朔夜) full archived profile. "
                 "Call this when you need canonical details about him not alive in recent "
                 "conversation (birth date, biography, long-term interests, aesthetic coordinates, "
                 "stated life missions, major past events). Do not call this just to check "

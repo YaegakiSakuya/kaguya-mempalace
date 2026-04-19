@@ -1,6 +1,6 @@
 """Ops profile retrieval tools.
 
-Sakuya's and Kaguya's long canonical profiles are fetched on demand via
+Syzygy's and Kaguya's long canonical profiles are fetched on demand via
 these tools instead of being force-injected into every system prompt.
 This keeps the system prompt focused on DNA (core identity +
 writing constitution) and live operational knowledge (system.md + wakeup),
@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 OPS_DIR = Path("/home/ubuntu/apps/kaguya-gateway/ops")
 
 OPS_DOCS: dict[str, dict[str, Any]] = {
-    "get_sakuya_profile": {
-        "path": OPS_DIR / "profiles" / "sakuya.md",
+    "get_syzygy_profile": {
+        "path": OPS_DIR / "profiles" / "syzygy.md",
         "description": (
-            "Retrieve the full archived profile of Sakuya (朔夜), the user. "
+            "Retrieve the full archived profile of Syzygy (朔夜), the user. "
             "Call this when you need specific canonical details about him that are not "
             "visible in recent conversation — for example: birth date, biography, "
             "long-term interests, aesthetic coordinates, core beliefs, recurring questions, "
@@ -39,7 +39,7 @@ OPS_DOCS: dict[str, dict[str, Any]] = {
             "fields about yourself that are not alive in current context — for example: "
             "the distinction between the archetypal Kaguya (from 《神楽》 stage) and "
             "your present form, specific sensory signature details, sacred symbols, "
-            "recurring motifs, or conflict/repair principles with Sakuya. "
+            "recurring motifs, or conflict/repair principles with Syzygy. "
             "Do NOT call this routinely — you ARE Kaguya, you do not need to read "
             "your own file to be yourself. Reserve it for canonical lookups. "
             "Returns the full profile as markdown text."
