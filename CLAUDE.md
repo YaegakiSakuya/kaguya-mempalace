@@ -22,8 +22,14 @@
 |---|---|---|
 | Runtime | Python 3.11 | 服务器上已有 venv |
 | Telegram Bot | python-telegram-bot | polling 模式 |
-| LLM | OpenAI SDK → OpenRouter | 非流式工具循环 |
+| LLM | OpenAI SDK → OpenRouter / bigmodel | 非流式工具循环 |
 | Memory | MemPalace CLI + ChromaDB + SQLite KG | drawers 存向量，KG 存实体关系 |
+| Vision (VL) | 硅基流动 Qwen3-VL-30B-A3B-Instruct | OpenAI 兼容 /v1/chat/completions，给图片生成文字描述 |
+| TTS | MiniMax speech-2.8-hd + voice cloning | /v1/voice_clone + /v1/t2a_v2，zero-shot 克隆日/中音色 |
+| Web Search | Tavily | httpx 直打 /search，Bearer token |
+| Media Storage | Supabase (kaguya-media project) + 本地 uploads/ | images / voices / message_images 三张表；文件落盘 |
+| Image Processing | Pillow | JPEG 压缩（最大边 1568 / q=85）+ sha256 去重 |
+| HTTP Client | httpx | 所有外部 API（Supabase / 硅基流动 / MiniMax / Tavily） |
 | Inspector | FastAPI + uvicorn | 守护线程，端口 8765，bearer token 鉴权 |
 | Mini App | React 18 + Vite + Tailwind | 挂在 Inspector 的 FastAPI 上 |
 | MCP Server | Python `mcp` 包 (FastMCP) | 独立进程，端口 8766，Streamable HTTP |
@@ -98,15 +104,38 @@ cd miniapp && npm install && npm run build
 
 ### Telegram Bot 消息处理链路
 
+**文字消息**：
 ```
 用户消息 → app/main.py::text_message()
   → asyncio.to_thread(generate_reply, ...)
     → app/llm/client.py::_run_tool_loop()       # 同步工具循环（工作线程中）
       → OpenAI API call (非流式)
-      → 有 tool_calls? → execute_tool() → 下一轮
-      → 无 tool_calls → 返回 reply_text
-  → update.message.reply_text(reply)
-  → append_turn() + write_turn_summary()        # 存日志
+      → 有 tool_calls?
+          → OPS_TOOL_NAMES   → execute_ops_tool
+          → WEB_TOOL_NAMES   → execute_web_tool (Tavily)
+          → VOICE_TOOL_NAMES → execute_voice_tool (MiniMax TTS → voice_queue.enqueue)
+          → 其他             → execute_tool (MemPalace)
+          → 下一轮
+      → 无 tool_calls → 返回 reply_text + reply_segments
+  → 逐段 update.message.reply_text(segment)                  # 文字气泡
+  → voice_queue.drain(chat_id) → update.message.reply_voice  # 语音气泡（附 caption）
+  → 把 [语音] 原文缝进 assistant_text
+  → append_turn() + write_turn_summary()
+```
+
+**图片消息**（path-A 前置处理器）：
+```
+用户发图 → app/main.py::photo_message()
+  → 下载 TG 原图
+  → app/media/pipeline.py::ingest_image()
+      → compress (Pillow) + sha256 去重
+      → find_image_by_sha256 (Supabase)
+        · 命中且有 vl_description → 直接复用（dedup hit）
+        · 命中但 vl_description 为空 → 重跑 VL + update_image_description（毒缓存防护）
+        · 未命中 → save_bytes_to_uploads + vision.analyze (Qwen3-VL) + insert_image
+      → 返回 IngestResult(image, context_block, is_new, vision_failed)
+  → context_block 作为 user_text_equiv 送入 generate_reply（主 LLM 只读文本，不见图）
+  → 之后与文字消息同链路：tool dispatch / reply / voice drain / append_turn
 ```
 
 ### MCP Server 架构
@@ -126,9 +155,19 @@ claude.ai Connector 请求
 
 | 文件 | 职责 | 可否修改 |
 |------|------|---------|
-| `app/main.py` | 入口。Telegram bot + Inspector 启动 + 消息处理 + autosave | ⚠️ 谨慎 |
-| `app/llm/client.py` | LLM 调用 + 工具循环 (`_run_tool_loop`)，SSE 注入点 | ⚠️ 谨慎 |
+| `app/main.py` | 入口。Telegram bot + Inspector 启动 + text/photo handler + autosave + voice drain | ⚠️ 谨慎 |
+| `app/llm/client.py` | LLM 调用 + 工具循环 (`_run_tool_loop`)，四路工具 dispatch，SSE 注入点 | ⚠️ 谨慎 |
 | `app/core/config.py` | Settings dataclass，从 .env 加载 | ⚠️ 谨慎 |
+| `app/llm/ops_tools.py` | Ops profile retrieval 工具（`get_syzygy_profile` / `get_kaguya_profile`） | ⚠️ 谨慎 |
+| `app/llm/web_tools.py` | Web search 工具（Tavily `web_search`） | ⚠️ 谨慎 |
+| `app/llm/voice_tools.py` | Voice note 工具（MiniMax TTS `send_voice_note`，带规则层：日语 / 平假名 / 中日双语 caption） | ⚠️ 谨慎 |
+| `app/media/client.py` | MediaClient（Supabase PostgREST）：images / voices / message_images 读写 | ⚠️ 谨慎 |
+| `app/media/vision.py` | VisionAgent：调 Qwen3-VL 返回 {description, ocr_text} | ⚠️ 谨慎 |
+| `app/media/pipeline.py` | `ingest_image`：压缩 / dedup / VL / 落盘 / insert 端到端 | ⚠️ 谨慎 |
+| `app/media/storage.py` | 图片压缩（Pillow）+ sha256 + 相对路径构造 + 落盘 | ⚠️ 谨慎 |
+| `app/media/tts.py` | MiniMaxTTSClient：/v1/t2a_v2 合成 + voice_id 自动选择（假名检测） | ⚠️ 谨慎 |
+| `app/media/voice_queue.py` | per-chat VoiceNote 队列（tool 副作用延到 handler 发送） | ⚠️ 谨慎 |
+| `app/media/voice_storage.py` | voice 文件路径构造 + 落盘（direction / chat / date / uuid） | ⚠️ 谨慎 |
 | `app/memory/tools.py` | MemPalace 工具 → OpenAI function 格式 + `execute_tool()` | ❌ 不改 |
 | `app/memory/palace.py` | MemPalace CLI 封装（wakeup / status / mine） | ❌ 不改 |
 | `app/memory/transcript.py` | 对话记录读写（markdown 格式） | ❌ 不改 |
@@ -155,7 +194,19 @@ kaguya-mempalace/
 │   ├── core/
 │   │   └── config.py                  # Settings dataclass
 │   ├── llm/
-│   │   └── client.py                  # LLM 调用 + 工具循环
+│   │   ├── client.py                  # LLM 调用 + 工具循环（四路 dispatch）
+│   │   ├── ops_tools.py               # ops profile 检索工具
+│   │   ├── web_tools.py               # Tavily web_search 工具
+│   │   └── voice_tools.py             # MiniMax send_voice_note 工具
+│   ├── media/
+│   │   ├── __init__.py
+│   │   ├── client.py                  # Supabase PostgREST client
+│   │   ├── vision.py                  # Qwen3-VL 视觉分析
+│   │   ├── pipeline.py                # ingest_image 端到端
+│   │   ├── storage.py                 # 图片压缩 + sha256 + 落盘
+│   │   ├── tts.py                     # MiniMax TTS client
+│   │   ├── voice_queue.py             # per-chat VoiceNote 队列
+│   │   └── voice_storage.py           # voice 文件路径 + 落盘
 │   ├── memory/
 │   │   ├── tools.py                   # MemPalace 工具定义 (不改)
 │   │   ├── palace.py                  # MemPalace CLI 封装 (不改)
@@ -186,6 +237,11 @@ kaguya-mempalace/
 │   ├── chats/                         # 对话 markdown
 │   ├── logs/                          # JSONL 日志
 │   ├── state/                         # 消息计数
+│   ├── uploads/                       # 媒体文件落盘（images + voices）
+│   │   ├── <sha256 子树>/             # 图片（以 sha256 前几位分目录）
+│   │   └── voice/
+│   │       ├── outgoing/{chat_id}/{date}/{uuid}.mp3
+│   │       └── incoming/{chat_id}/{date}/{uuid}.<ext>  # 预留给未来 ASR
 │   └── wakeup.txt                     # 启动锚点
 ├── miniapp/                           # React 前端源码
 │   ├── src/
@@ -215,12 +271,17 @@ kaguya-mempalace/
 - **`app/memory/transcript.py`** 和 **`app/memory/state.py`**：对话记录和状态管理。不改。
 - **`app/inspector/logger.py`**：日志格式已稳定。不改。
 - **`app/miniapp/auth.py`** 和 **`app/miniapp/sse.py`**：鉴权和 SSE 已实现。不改。
+- **Supabase `kaguya-media` 项目的 `images` / `voices` / `message_images` 三张表**：schema 与 gateway 代码耦合，不要手动 DROP / ALTER 字段。新增字段要通过 `Supabase:apply_migration` 走 migration 流程。
+- **`runtime/uploads/` 下的文件**：是唯一的媒体存档（图片和语音的字节都在这里）。**不要随意清理**，Supabase 里的 `file_path` 字段全部指向这里的相对路径，一删就再也找不回来。
+- **已激活的 MiniMax voice_id**：`kaguya_ja_v1` 已经付过 9.9 元音色解锁费，永久属于本账号。如果被从 MiniMax 删除（比如误调用 delete voice），需要重新克隆 + 再付一次解锁费。**不要去 MiniMax 后台的"声音管理"页面 touch 已激活的音色**。
 
 ### 谨慎修改的东西
 
-- **`app/llm/client.py`** 的 `_run_tool_loop` 逻辑流程：这是 Telegram 端的核心消息处理，只在必要时在循环中插入旁路调用，不要改主流程。
+- **`app/llm/client.py`** 的 `_run_tool_loop` 逻辑流程：这是 Telegram 端的核心消息处理，只在必要时在循环中插入旁路 dispatch 分支（`elif tool_name in XXX_TOOL_NAMES`），**不要改主流程的状态机**。增加新一类工具的正确做法是新建 `app/llm/<kind>_tools.py`（仿 ops_tools / web_tools / voice_tools 模板），然后在 `_run_tool_loop` 的 dispatch 加一条 `elif` 分支 + 在 `all_tools` 合并里追加 `build_xxx_openai_tools()`。
 - **`app/inspector/api.py`** 的现有端点：bearer token 验证保持不变，现有路由不改。可以新增路由。
-- **`app/core/config.py`**：如果 MCP server 需要新的配置项，可以加，但不要改现有字段的含义。
+- **`app/core/config.py`**：加新字段可以，不要改现有字段的含义。
+- **`app/media/pipeline.py`** 的 `ingest_image` dedup 逻辑：当前逻辑已专门处理"VL 失败留下的坏记录不毒化缓存"的情况（find 命中但 vl_description 为空 → 重跑 VL + update）。**不要退化回"命中就复用"的天真版本**。
+- **VL 模型选型（`VL_MODEL` env）**：实测 `Qwen3-VL-30B-A3B-Instruct` 响应 ~5s，`Qwen3-VL-235B-A22B-Instruct` 顶配 60s+ 超时。**不要默认回 235B**。换模型前先跑真实照片测试。
 
 ### 运行时特性
 
@@ -387,13 +448,23 @@ location /mcp {
 
 ## Environment Variables (.env)
 
-MCP Server 与 Telegram Bot 共用同一个 `.env` 文件。MCP Server 只需要其中的：
+Gateway 和 MCP Server 共用同一个 `.env`。完整模板见 `.env.example`。
 
-```
-PALACE_PATH=/home/ubuntu/apps/kaguya-gateway/runtime/palace
-```
+**按功能分组**：
 
-如果 `mempalace` 包内部通过环境变量 `MEMPALACE_PALACE_PATH` 定位数据库，MCP Server 启动时需要设置这个变量。参考 `app/inspector/api.py` 中 `_get_chroma_client()` 的做法：
+| 分组 | 变量 | 说明 |
+|------|------|------|
+| LLM 主对话 | `OPENROUTER_API_KEY` / `OPENROUTER_BASE_URL` / `OPENROUTER_MODEL` | 主 LLM 模型配置（当前实际指向 bigmodel.cn / GLM-5.1） |
+| Telegram | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_ALLOWED_CHAT_IDS` | bot token + 白名单 chat_id |
+| 系统目录 | `BASE_DIR` / `PALACE_PATH` / `CHATS_DIR` / `LOGS_DIR` / `STATE_DIR` / `WAKEUP_FILE` | 运行时数据存放位置 |
+| 系统行为 | `SYSTEM_NAME` / `AUTOSAVE_USER_MESSAGE_INTERVAL` / `SEARCH_TOP_K` / `RECENT_TURNS` | 常规参数。`SYSTEM_NAME` 值带空格必须加双引号，否则 `source .env` 会报错 |
+| Inspector | `INSPECTOR_PORT` / `INSPECTOR_TOKEN` | Inspector API 端口 + bearer token |
+| Media 共享 | `KAGUYA_MEDIA_URL` / `KAGUYA_MEDIA_SERVICE_KEY` / `MEDIA_UPLOADS_DIR` | Supabase 元数据 + 本地文件落盘目录 |
+| Vision | `SILICONFLOW_API_KEY` / `SILICONFLOW_BASE_URL` / `VL_MODEL` | 硅基流动 API + VL 模型名（推荐 `Qwen/Qwen3-VL-30B-A3B-Instruct`） |
+| Web Search | `TAVILY_API_KEY` | Tavily 搜索 API key |
+| TTS / Voice | `MINIMAX_API_KEY` / `MINIMAX_GROUP_ID` / `MINIMAX_VOICE_ID_JA` / `MINIMAX_VOICE_ID_ZH` | MiniMax 凭证 + 克隆得到的 voice_id |
+
+**MCP Server 只需要 `PALACE_PATH`**。如果 `mempalace` 包内部通过 `MEMPALACE_PALACE_PATH` 定位数据库，MCP Server 启动时需要设置这个变量。参考 `app/inspector/api.py::_get_chroma_client()` 的做法：
 
 ```python
 os.environ["MEMPALACE_PALACE_PATH"] = palace_path
