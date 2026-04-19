@@ -108,11 +108,14 @@ def load_recent_diary(n: int = 6) -> str:
                 count_kwarg = candidate
                 break
 
+        # diary_read is agent-scoped in this codebase — always pass
+        # agent_name="kaguya" to match the convention used elsewhere
+        # (see app/inspector/api.py). Omitting it risks TypeError or
+        # loading the wrong agent's diary.
+        call_kwargs: dict = {"agent_name": "kaguya"}
         if count_kwarg:
-            result = handler(**{count_kwarg: n})
-        else:
-            # Schema declares no count arg — call with no args
-            result = handler()
+            call_kwargs[count_kwarg] = n
+        result = handler(**call_kwargs)
 
         if isinstance(result, str):
             return result.strip()
