@@ -12,3 +12,4 @@ runtime/wakeup.txt
 runtime/wakeup.txt.bak
 miniapp/node_modules/
 miniapp/dist/
+runtime/uploads/

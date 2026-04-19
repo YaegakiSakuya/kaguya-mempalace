@@ -33,6 +33,9 @@ class Settings:
     recent_turns: int
     inspector_port: int
     inspector_token: str
+    kaguya_media_url: str
+    kaguya_media_service_key: str
+    media_uploads_dir: Path
 
 
 def load_settings() -> Settings:
@@ -56,6 +59,9 @@ def load_settings() -> Settings:
         recent_turns=int(os.getenv("RECENT_TURNS", "8")),
         inspector_port=int(os.getenv("INSPECTOR_PORT", "8765")),
         inspector_token=os.getenv("INSPECTOR_TOKEN", "").strip(),
+        kaguya_media_url=os.getenv("KAGUYA_MEDIA_URL", "").strip(),
+        kaguya_media_service_key=os.getenv("KAGUYA_MEDIA_SERVICE_KEY", "").strip(),
+        media_uploads_dir=Path(os.getenv("MEDIA_UPLOADS_DIR", str(base_dir / "runtime" / "uploads"))).resolve(),
     )
 
     required = {
@@ -67,7 +73,7 @@ def load_settings() -> Settings:
     if missing:
         raise RuntimeError(f"Missing required environment variables: {', '.join(missing)}")
 
-    for path in [settings.chats_dir, settings.logs_dir, settings.state_dir, settings.palace_path]:
+    for path in [settings.chats_dir, settings.logs_dir, settings.state_dir, settings.palace_path, settings.media_uploads_dir]:
         path.mkdir(parents=True, exist_ok=True)
 
     settings.wakeup_file.parent.mkdir(parents=True, exist_ok=True)
