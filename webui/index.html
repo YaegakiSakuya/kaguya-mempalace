@@ -383,6 +383,50 @@
     return { name: dataId, jp: '', code: '' };
   }
 
+  // /api/wings 的 payload 兜底 normalize。
+  // 服务端(app/inspector/api.py)对 mempalace_list_wings 的输出历史上承认过三种形态:
+  //   1. { wings: { wing_xxx: count, ... } }  —— 当前部署实测形态
+  //   2. { wing_xxx: count, ... }             —— 顶层 flat
+  //   3. [wing_name, ...]                     —— 纯名字列表(无 count)
+  // 返回统一的 { wing_key: count } 字典,未知 count 计为 0。
+  function normalizeWingsMap(raw) {
+    const w = raw && raw.wings != null ? raw.wings : raw;
+    if (!w) return {};
+    if (Array.isArray(w)) {
+      const out = {};
+      w.forEach((name) => { if (typeof name === 'string') out[name] = 0; });
+      return out;
+    }
+    if (typeof w === 'object') {
+      const out = {};
+      Object.keys(w).forEach((k) => {
+        const v = w[k];
+        out[k] = typeof v === 'number' ? v : 0;
+      });
+      return out;
+    }
+    return {};
+  }
+
+  // /api/taxonomy 里单个 wing 的 rooms 字段形态兜底。
+  // 服务端同样兼容两种:{room: count} 字典 和 [room, ...] 列表。
+  // 返回统一的 [{ name, count }],list 形态下 count 为 0(无从得知)。
+  function normalizeRoomsFor(wingBody) {
+    if (!wingBody) return [];
+    if (Array.isArray(wingBody)) {
+      return wingBody
+        .filter((x) => typeof x === 'string' && x)
+        .map((name) => ({ name, count: 0 }));
+    }
+    if (typeof wingBody === 'object') {
+      return Object.keys(wingBody).map((name) => {
+        const v = wingBody[name];
+        return { name, count: typeof v === 'number' ? v : 0 };
+      });
+    }
+    return [];
+  }
+
   function showError(container, err) {
     container.innerHTML =
       '<div style="color:var(--camellia-text);font-size:12px;padding:20px;">' +
@@ -410,7 +454,7 @@
         window.KaguyaAPI.getTaxonomy(),
       ]);
 
-      const wingsMap = (wingsData && wingsData.wings) || {};
+      const wingsMap = normalizeWingsMap(wingsData);
       const taxonomy = (tax && tax.taxonomy) || {};
 
       const activeWings = Math.max(0, (ov.wings || 0) - 1);
@@ -420,12 +464,10 @@
       let hot = { wingKey: '', room: '', count: 0 };
       Object.keys(taxonomy).forEach((wingKey) => {
         if (wingKey === 'chats') return;
-        const rooms = taxonomy[wingKey];
-        if (!rooms || typeof rooms !== 'object') return;
-        Object.keys(rooms).forEach((roomName) => {
-          const c = Number(rooms[roomName] || 0);
-          if (c > hot.count) {
-            hot = { wingKey, room: roomName, count: c };
+        const rooms = normalizeRoomsFor(taxonomy[wingKey]);
+        rooms.forEach(({ name, count }) => {
+          if (count > hot.count) {
+            hot = { wingKey, room: name, count };
           }
         });
       });
@@ -484,15 +526,15 @@
         window.KaguyaAPI.getTaxonomy(),
       ]);
 
-      const wingsMap = (wingsData && wingsData.wings) || {};
+      const wingsMap = normalizeWingsMap(wingsData);
       const taxonomy = (tax && tax.taxonomy) || {};
 
       const entries = Object.keys(wingsMap).map((apiKey) => {
         const drawerCount = Number(wingsMap[apiKey] || 0);
         const dataId = apiWingIdToDataId(apiKey);
         const meta = lookupWingMeta(dataId);
-        const roomsObj = taxonomy[apiKey] || {};
-        const rooms = Object.keys(roomsObj);
+        const roomList = normalizeRoomsFor(taxonomy[apiKey]);
+        const rooms = roomList.map((r) => r.name);
         return {
           apiKey, dataId, drawerCount,
           name: meta.name || dataId,
