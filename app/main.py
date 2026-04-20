@@ -1,5 +1,30 @@
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# Environment setup — must happen before any mempalace import
+# ---------------------------------------------------------------------------
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+_project_root = Path(__file__).resolve().parent.parent
+_dotenv_path = _project_root / ".env"
+load_dotenv(_dotenv_path)
+
+_base_dir = Path(
+    os.getenv("BASE_DIR", "/home/ubuntu/apps/kaguya-mempalace")
+).resolve()
+_palace_path = Path(
+    os.getenv("PALACE_PATH", str(_base_dir / "runtime" / "palace"))
+).resolve()
+
+os.environ["MEMPALACE_PALACE_PATH"] = str(_palace_path)
+
+# ---------------------------------------------------------------------------
+# Regular imports
+# ---------------------------------------------------------------------------
+
 import asyncio
 import logging
 import threading
