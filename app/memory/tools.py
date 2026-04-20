@@ -12,7 +12,7 @@ from mempalace.mcp_server import TOOLS as MEMPALACE_TOOLS
 logger = logging.getLogger(__name__)
 
 _BASE_DIR = Path(
-    os.getenv("BASE_DIR", "/home/ubuntu/apps/kaguya-gateway")
+    os.getenv("BASE_DIR", "/home/ubuntu/apps/kaguya-mempalace")
 ).resolve()
 _WING_REJECT_LOG = _BASE_DIR / "runtime" / "logs" / "wing_prefix_rejections.jsonl"
 

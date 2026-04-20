@@ -40,7 +40,7 @@
 ## Commands
 
 ```bash
-cd /home/ubuntu/apps/kaguya-gateway
+cd /home/ubuntu/apps/kaguya-mempalace
 
 # === Telegram Bot + Inspector ===
 # 前台启动
@@ -254,10 +254,21 @@ kaguya-mempalace/
 ├── systemd/
 │   ├── kaguya-gateway.service         # Telegram Bot + Inspector
 │   └── kaguya-mcp.service            # MCP Server
+├── webui/                             # 桌面端静态网页门面（详见下节）
 ├── .env                               # 环境变量（gitignored）
 ├── .env.example                       # 环境变量模板
 └── .gitignore
 ```
+
+---
+
+## webui/ 桌面端网页门面
+
+- `webui/` 是 mempalace 的桌面端静态网页门面，独立于 Telegram Mini App（`miniapp/`）
+- 入口 `webui/index.html`，7 个 html 页面平铺在根目录 + `webui/assets/` 下 3 个共享资源
+- 所有内部链接是相对路径，部署时挂在 nginx 子路径下即可
+- **当前未部署**，部署由 VPS 侧架构师处理
+- 源码由项目所有者手工维护，**不要自动化修改 `webui/` 目录下任何文件**
 
 ---
 
@@ -390,9 +401,9 @@ for name, spec in TOOLS.items():
 模仿现有的 `systemd/kaguya-gateway.service` 风格：
 
 - `Description=Kaguya MemPalace MCP Server`
-- `WorkingDirectory=/home/ubuntu/apps/kaguya-gateway`
-- `ExecStart=/home/ubuntu/apps/kaguya-gateway/.venv/bin/python -m app.mcp.server`
-- `EnvironmentFile=/home/ubuntu/apps/kaguya-gateway/.env`（与 gateway 共用同一个 .env）
+- `WorkingDirectory=/home/ubuntu/apps/kaguya-mempalace`
+- `ExecStart=/home/ubuntu/apps/kaguya-mempalace/.venv/bin/python -m app.mcp.server`
+- `EnvironmentFile=/home/ubuntu/apps/kaguya-mempalace/.env`（与 gateway 共用同一个 .env）
 - `Restart=on-failure`
 - `User=ubuntu`
 
@@ -487,7 +498,7 @@ os.environ["MEMPALACE_PALACE_PATH"] = palace_path
 MCP Server 需要安装 `mcp` Python 包。在实现前：
 
 ```bash
-cd /home/ubuntu/apps/kaguya-gateway
+cd /home/ubuntu/apps/kaguya-mempalace
 .venv/bin/pip install mcp
 ```
 

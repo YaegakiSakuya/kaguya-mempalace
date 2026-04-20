@@ -15,7 +15,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-OPS_DIR = Path("/home/ubuntu/apps/kaguya-gateway/ops")
+OPS_DIR = Path("/home/ubuntu/apps/kaguya-mempalace/ops")
 
 OPS_DOCS: dict[str, dict[str, Any]] = {
     "get_syzygy_profile": {

@@ -3,7 +3,7 @@
 preseed_palace.py — 为新palace预置wing/room地基。
 
 用法：
-    cd /home/ubuntu/apps/kaguya-gateway
+    cd /home/ubuntu/apps/kaguya-mempalace
     .venv/bin/python preseed_palace.py
 
 做的事情：
@@ -21,7 +21,7 @@ import sys
 from datetime import datetime
 
 # 确保能import app模块
-sys.path.insert(0, "/home/ubuntu/apps/kaguya-gateway")
+sys.path.insert(0, "/home/ubuntu/apps/kaguya-mempalace")
 
 from app.memory.tools import execute_tool
 

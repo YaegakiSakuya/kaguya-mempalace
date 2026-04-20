@@ -25,7 +25,7 @@ _dotenv_path = _project_root / ".env"
 load_dotenv(_dotenv_path)
 
 _base_dir = Path(
-    os.getenv("BASE_DIR", "/home/ubuntu/apps/kaguya-gateway")
+    os.getenv("BASE_DIR", "/home/ubuntu/apps/kaguya-mempalace")
 ).resolve()
 _palace_path = Path(
     os.getenv("PALACE_PATH", str(_base_dir / "runtime" / "palace"))
