@@ -180,7 +180,7 @@ claude.ai Connector 请求
 | `ops/profiles/*.md` | 外置 profile 文件（朔夜 / 辉夜的人格档案） | ❌ 绝对不改 |
 | `app/mcp/server.py` | MCP Server 入口 | ⚠️ 谨慎 |
 | `systemd/kaguya-mcp.service` | MCP Server systemd unit | ⚠️ 谨慎 |
-| `nginx/mcp.conf` | nginx 反代配置参考 | ⚠️ 谨慎 |
+| `nginx/api.onlykaguya.com.conf` | nginx 站点配置(权威,同线上 1:1 对齐) | ⚠️ 谨慎 |
 | `scripts/test_mcp.py` | MCP Server 本地测试脚本 | ⚠️ 谨慎 |
 
 ---
@@ -247,8 +247,8 @@ kaguya-mempalace/
 │   ├── src/
 │   ├── package.json
 │   └── vite.config.js                 # base: '/miniapp/'
-├── nginx/                             # nginx 配置参考
-│   └── mcp.conf
+├── nginx/                             # nginx 站点配置(权威)
+│   └── api.onlykaguya.com.conf
 ├── scripts/                           # 实用脚本
 │   └── test_mcp.py
 ├── systemd/
@@ -407,35 +407,11 @@ for name, spec in TOOLS.items():
 - `Restart=on-failure`
 - `User=ubuntu`
 
-### nginx 配置：`nginx/mcp.conf`
+### nginx 配置：`nginx/api.onlykaguya.com.conf`
 
-```nginx
-# Kaguya MemPalace MCP Server — 放入 nginx server block 内
+完整站点配置(miniapp / palace / mcp / exec / HTTPS 等全部路由)存放在 `nginx/api.onlykaguya.com.conf`，和线上 `/etc/nginx/sites-available/api.onlykaguya.com` 1:1 对齐。部署步骤、路由职责、证书管理等说明见 `deploy/README.md` 的「nginx 配置部署」一节。
 
-location /mcp {
-    # IP 白名单：仅允许 Anthropic 出站 IP
-    allow 160.79.104.0/21;
-    deny all;
-
-    # 反代到 MCP server
-    # FastMCP 默认 endpoint 是 /mcp，所以用 proxy_pass 不带末尾 /
-    # 以保留 /mcp 前缀原样传给 upstream
-    proxy_pass http://127.0.0.1:8766;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-
-    # Streamable HTTP 可能用 SSE streaming，禁用缓冲
-    proxy_buffering off;
-    proxy_cache off;
-    proxy_read_timeout 300s;
-    proxy_send_timeout 300s;
-}
-```
-
-> **注意**：FastMCP 的 Streamable HTTP 默认 endpoint 是 `/mcp`。nginx `location /mcp`（无末尾 `/`）匹配 `/mcp` 和 `/mcp/...`，`proxy_pass http://127.0.0.1:8766;`（无末尾 `/`）保留请求 URI 原样传给 upstream。
+此前这里嵌入的 `/mcp` 单路由片段已移除——为避免与实际站点配置漂移,样板代码不再在此重复,请直接查阅上述 conf 文件。
 
 ### 本地测试脚本：`scripts/test_mcp.py`
 

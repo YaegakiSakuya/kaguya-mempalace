@@ -41,3 +41,38 @@ sudo systemctl reload nginx
 
 前端通过 nginx 反代访问后端 API，不需要设置 VITE_API_BASE。
 确保 useApi.js 和 useSSE.js 中的 API_BASE 默认值为空字符串。
+
+## nginx 配置部署
+
+权威文件：`nginx/api.onlykaguya.com.conf`，1:1 对应线上 `/etc/nginx/sites-available/api.onlykaguya.com` 的完整 server block。
+
+### 部署步骤
+
+```bash
+sudo cp nginx/api.onlykaguya.com.conf /etc/nginx/sites-available/api.onlykaguya.com
+sudo ln -sf /etc/nginx/sites-available/api.onlykaguya.com /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+第二步在符号链接已存在时是幂等的。
+
+### TLS 证书
+
+由 certbot 管理，路径 `/etc/letsencrypt/live/api.onlykaguya.com/`。新机器首次部署需先签发证书：
+
+```bash
+sudo certbot --nginx -d api.onlykaguya.com
+```
+
+### 当前 server block 包含的路由
+
+- `/miniapp/` — Telegram Mini App 静态资源 + 4 个后端代理路由（`127.0.0.1:8765`）
+- `/palace/` — 桌面端网页门面（`webui/` 目录），静态资源
+- `/mcp` — FastMCP 服务（`127.0.0.1:8766`），IP 白名单
+- `/exec/` — Exec MCP（`127.0.0.1:3456`），IP 白名单
+- `/.well-known/oauth-*` — 显式 404，防止 MCP client 误探测
+- `/` — 404（故意，根路径不对外服务）
+
+### 维护约定
+
+线上 `/etc/nginx/...` 有任何改动，必须立即同步回 `nginx/api.onlykaguya.com.conf` 并提 PR，避免再次漂移。
