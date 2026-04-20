@@ -227,82 +227,384 @@
 </div>
 <script src="assets/data.js"></script>
 <script src="assets/shell.js"></script>
+<script src="assets/api.js"></script>
 <script>
 (function () {
-  // ---------- build 365-day heatmap ----------
-  const grid = document.getElementById('hm-grid');
-  const months = document.getElementById('hm-months');
-  if (!grid) return;
+  'use strict';
 
-  // days since 2025-04-20 (Sun) to 2026-04-19 (Sun) => 365 days
-  const start = new Date(2025, 3, 20);  // Apr 20 2025 (Sun)
-  const total = 365;
-  const weeks = 53;
+  const esc = (s) => window.KaguyaAPI.escapeHtml(s);
 
-  // month labels
-  let monthHtml = '';
-  const monthCols = {};
-  for (let i = 0; i < total; i++) {
-    const d = new Date(start); d.setDate(start.getDate() + i);
-    const week = Math.floor(i / 7);
-    const mk = d.getFullYear() + '-' + d.getMonth();
-    if (d.getDate() <= 7 && monthCols[mk] === undefined) monthCols[mk] = { col: week, m: d.getMonth() };
+  // ---------- date helpers ----------
+  function toDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + dd;
   }
-  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  for (let w = 0; w < weeks; w++) {
-    let label = '';
-    for (const k in monthCols) if (monthCols[k].col === w) label = MON[monthCols[k].m];
-    monthHtml += `<div style="grid-column:${w+1}/span 1;">${label}</div>`;
+
+  function parseTs(ts) {
+    if (!ts) return null;
+    const d = new Date(String(ts).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return null;
+    return d;
   }
-  months.innerHTML = monthHtml;
 
-  // deterministic pseudo-random intensities
-  const WEEKDAYS = ['M','','W','','F','',''];
-  const WEEKDAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+  function parseDateOnly(dateStr) {
+    if (!dateStr) return null;
+    const parts = String(dateStr).split('-');
+    if (parts.length < 3) return null;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const d = parseInt(parts[2], 10);
+    if (!isFinite(y) || !isFinite(m) || !isFinite(d)) return null;
+    const dt = new Date(y, m - 1, d);
+    dt.setHours(0, 0, 0, 0);
+    return dt;
+  }
 
-  // build 7 rows × 53 cols; row 0 = Sunday (since start is Sunday)
-  const rows = [];
-  for (let row = 0; row < 7; row++) {
-    rows.push(`<div class="hm-weekday">${WEEKDAY_LABELS[row] || ''}</div>`);
+  function hhmm(d) {
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  const WEEKDAYS_EN = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const WEEKDAYS_CN = ['日', '一', '二', '三', '四', '五', '六'];
+
+  // ---------- streak computations ----------
+  function computeCurrentStreak(dateSet) {
+    if (!dateSet.size) return 0;
+    let streak = 0;
+    const cursor = new Date();
+    cursor.setHours(0, 0, 0, 0);
+    // allow today to be empty (writing "today" may be pending)
+    if (!dateSet.has(toDateStr(cursor))) {
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    while (dateSet.has(toDateStr(cursor))) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+  }
+
+  function computeLongestStreak(dateSet) {
+    if (!dateSet.size) return 0;
+    const sorted = Array.from(dateSet).sort();
+    let best = 1;
+    let cur = 1;
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = parseDateOnly(sorted[i - 1]);
+      const now = parseDateOnly(sorted[i]);
+      if (!prev || !now) continue;
+      const diffDays = Math.round((now.getTime() - prev.getTime()) / 86400000);
+      if (diffDays === 1) {
+        cur++;
+        if (cur > best) best = cur;
+      } else if (diffDays > 1) {
+        cur = 1;
+      }
+    }
+    return best;
+  }
+
+  // ---------- renderers ----------
+  function renderPageHead(totalDays, totalEntries, currentStreak, longestStreak) {
+    const head = document.querySelector('.page-head');
+    if (!head) return;
+    head.innerHTML = `
+      <div>
+        <div class="eyebrow">Diary · 日誌 · AAAK</div>
+        <h1 class="page-title">${totalDays} 天，<span class="em">写过 ${totalEntries} 块。</span></h1>
+        <p class="page-sub"><em>AAAK</em>：Acknowledge · Appreciate · Adjust · Keep。今晚的 <em>Adjust</em> 还没写——不急，明天早上补。</p>
+      </div>
+      <div class="page-head-right">
+        <div class="big">${currentStreak}</div>
+        <div>CURRENT STREAK · 日</div>
+        <div class="accent">LONGEST · ${longestStreak}</div>
+      </div>
+    `;
+  }
+
+  function renderHeatmapHead() {
+    const heatHead = document.querySelector('.heatmap-head .kicker');
+    if (!heatHead) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = new Date(today);
+    start.setDate(today.getDate() - 364);
+    const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    heatHead.textContent = fmt(start) + ' → ' + fmt(today);
+  }
+
+  function renderHeatmap(entriesByDate) {
+    const grid = document.getElementById('hm-grid');
+    const monthsRow = document.getElementById('hm-months');
+    if (!grid) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Align to Sunday of the week 52 weeks before this week's Sunday (365 days ≈ 53 weeks)
+    const startSun = new Date(today);
+    startSun.setDate(today.getDate() - today.getDay() - 52 * 7);
+
+    const weeks = 53;
+    const WEEKDAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+
+    // Month labels — first column each month appears in
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthCols = {};
+    const seenMonths = new Set();
     for (let col = 0; col < weeks; col++) {
-      const idx = col * 7 + row;
-      if (idx >= total) { rows.push('<span></span>'); continue; }
-      const d = new Date(start); d.setDate(start.getDate() + idx);
-      const r = Math.sin(idx * 12.9898 + 78.233) * 43758.5453;
-      const rnd = r - Math.floor(r);
-      let lvl = 0;
-      if (rnd > 0.35) lvl = 1;
-      if (rnd > 0.60) lvl = 2;
-      if (rnd > 0.80) lvl = 3;
-      if (rnd > 0.93) lvl = 4;
-      // recent 23 days → guaranteed streak (from Mar 28)
-      const daysFromToday = total - 1 - idx;
-      if (daysFromToday <= 22) lvl = Math.max(lvl, 2 + (daysFromToday % 3 === 0 ? 2 : 1));
-      const today = daysFromToday === 0;
-      const titles = ['今天的安静是被允许的','把周末还给自己','信任是可撤回的允许','四月以来第三周','边界不是规则','月影','三次烧成','Appreciate 比 Acknowledge 长','关于 kaguya 的第一个问题','神楽零 §III 的回声','点灯仪式','洗盏'];
-      const title = titles[Math.floor(rnd * titles.length)];
-      const dstr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
-      rows.push(`<div class="hm-cell${lvl?' l'+lvl:''}${today?' today':''}" title="${dstr}"><span class="tip">${dstr}<span class="t">${lvl?title:'—'}</span></span></div>`);
+      for (let row = 0; row < 7; row++) {
+        const d = new Date(startSun);
+        d.setDate(startSun.getDate() + col * 7 + row);
+        if (d > today) continue;
+        const key = d.getFullYear() + '-' + d.getMonth();
+        if (!seenMonths.has(key) && d.getDate() <= 7) {
+          seenMonths.add(key);
+          monthCols[col] = MON[d.getMonth()];
+          break;
+        }
+      }
     }
-  }
-  grid.innerHTML = rows.join('');
-  grid.style.gridTemplateRows = 'repeat(7, auto)';
-  grid.style.gridAutoFlow = 'row';
+    let monthHtml = '';
+    for (let w = 0; w < weeks; w++) {
+      monthHtml += `<div style="grid-column:${w + 1}/span 1;">${monthCols[w] || ''}</div>`;
+    }
+    if (monthsRow) monthsRow.innerHTML = monthHtml;
 
-  // streak bars (last 30 days)
-  const bars = document.getElementById('streak-bars');
-  let bh = '';
-  for (let i = 0; i < 30; i++) {
-    const daysFromToday = 29 - i;
-    const written = daysFromToday <= 22;
-    if (!written) {
-      bh += `<span class="off" style="height:${15 + (i*7)%15}%"></span>`;
-    } else {
-      const h = 45 + ((i * 29) % 55);
-      bh += `<span class="on" style="height:${h}%"></span>`;
+    // Cells — row outer, col inner; grid-auto-flow: row fills left-to-right top-to-bottom
+    const html = [];
+    for (let row = 0; row < 7; row++) {
+      html.push(`<div class="hm-weekday">${WEEKDAY_LABELS[row] || ''}</div>`);
+      for (let col = 0; col < weeks; col++) {
+        const d = new Date(startSun);
+        d.setDate(startSun.getDate() + col * 7 + row);
+        if (d > today) {
+          html.push('<span></span>');
+          continue;
+        }
+        const dstr = toDateStr(d);
+        const count = entriesByDate.get(dstr) || 0;
+        let lvl = 0;
+        if (count === 1) lvl = 1;
+        else if (count === 2) lvl = 2;
+        else if (count >= 3 && count <= 4) lvl = 3;
+        else if (count >= 5) lvl = 4;
+        const isToday = d.getTime() === today.getTime();
+        const tipLabel = count ? `${count} entries` : '—';
+        html.push(
+          `<div class="hm-cell${lvl ? ' l' + lvl : ''}${isToday ? ' today' : ''}" title="${dstr}: ${count} entries"><span class="tip">${dstr}<span class="t">${tipLabel}</span></span></div>`
+        );
+      }
     }
+    grid.innerHTML = html.join('');
+    grid.style.gridTemplateRows = 'repeat(7, auto)';
+    grid.style.gridAutoFlow = 'row';
   }
-  bars.innerHTML = bh;
+
+  function renderTodaySectionHead(entry) {
+    const head = document.querySelector('.diary-layout .section-head h2');
+    if (!head) return;
+    let monthSlashDay = '-- / --';
+    let weekdayCn = '';
+    const d = parseDateOnly(entry && entry.date) || null;
+    if (d) {
+      monthSlashDay = String(d.getMonth() + 1).padStart(2, '0') + ' / ' + String(d.getDate()).padStart(2, '0');
+      weekdayCn = WEEKDAYS_CN[d.getDay()] + '曜';
+    }
+    head.innerHTML = `Today · ${monthSlashDay} <span class="jp">${weekdayCn}</span>`;
+  }
+
+  function renderToday(entry) {
+    const card = document.querySelector('.today-card');
+    if (!card) return;
+    if (!entry) {
+      card.innerHTML = `<div style="padding:20px;color:var(--text-3);font-size:12px;">暂无 diary</div>`;
+      return;
+    }
+    const dateStr = entry.date || '';
+    const topic = entry.topic || '';
+    const content = entry.content || '';
+    const d = parseDateOnly(dateStr);
+    const monthSlashDay = d
+      ? String(d.getMonth() + 1).padStart(2, '0') + ' / ' + String(d.getDate()).padStart(2, '0')
+      : '-- / --';
+
+    const tsDate = parseTs(entry.timestamp) || d;
+    const weekday = tsDate ? WEEKDAYS_EN[tsDate.getDay()] : '';
+    const timeStr = entry.timestamp && tsDate ? hhmm(tsDate) : '';
+    const subLine = [weekday, timeStr ? 'JST ' + timeStr : ''].filter(Boolean).join(' · ');
+
+    const topicTag = topic
+      ? `<span class="state">${esc(String(topic).toUpperCase())}</span>`
+      : '';
+
+    card.innerHTML = `
+      <div class="today-date">
+        <span class="big">${esc(monthSlashDay)}</span>
+        <span class="weekday">${esc(subLine)}</span>
+        ${topicTag}
+      </div>
+      <div class="aaak">
+        <div class="aaak-label">§ ENTRY${topic ? ' · ' + esc(topic) : ''} <span class="gl">記録</span></div>
+        <p class="aaak-text" style="white-space: pre-wrap;">${esc(content)}</p>
+      </div>
+    `;
+  }
+
+  function relDayLabel(d) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round((today.getTime() - d.getTime()) / 86400000);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    return '';
+  }
+
+  function renderPastWeek(entries) {
+    const stack = document.querySelector('.diary-layout .drawer-stack');
+    if (!stack) return;
+    const rest = entries.slice(1, 6);
+    if (!rest.length) {
+      stack.innerHTML = `<div style="color:var(--text-3);font-size:12px;padding:20px;">暂无更多 diary</div>`;
+      return;
+    }
+    stack.innerHTML = rest.map((e) => {
+      const dateStr = e.date || '';
+      const d = parseDateOnly(dateStr);
+      const wCn = d ? WEEKDAYS_CN[d.getDay()] : '';
+      const relLabel = d ? relDayLabel(d) : '';
+      const timeRight = [wCn, relLabel].filter(Boolean).join(' · ');
+      const topic = e.topic || '(untitled)';
+      const content = e.content || '';
+      const excerpt = window.KaguyaAPI.truncate(content, 140);
+      return `
+        <a class="drawer" href="#" data-diary-date="${esc(dateStr)}">
+          <div class="drawer-head">
+            <div class="drawer-path">DIARY<span class="slash">/</span>${esc(dateStr)}</div>
+            <div class="drawer-time">${esc(timeRight)}</div>
+          </div>
+          <h3 class="drawer-title">${esc(topic)}</h3>
+          <p class="drawer-excerpt">${esc(excerpt)}</p>
+          <div class="drawer-foot"><span>${content.length} 字</span></div>
+        </a>
+      `;
+    }).join('');
+  }
+
+  function renderStreakCard(dateSet, currentStreak, longestStreak) {
+    const side = document.querySelectorAll('.diary-layout aside .side-card');
+    if (!side || !side.length) return;
+    const card = side[0];
+    const totalDays = dateSet.size;
+    let firstDate = '';
+    if (totalDays) {
+      const sorted = Array.from(dateSet).sort();
+      const d = parseDateOnly(sorted[0]);
+      if (d) firstDate = (d.getMonth() + 1) + '.' + d.getDate();
+    }
+    const firstTxt = firstDate ? `从 ${firstDate} 起共写过 ${totalDays} 天。` : `共写过 ${totalDays} 天。`;
+    card.innerHTML = `
+      <div class="kicker">Streak · 連続</div>
+      <div style="margin-top:10px;" class="streak-big">${currentStreak}<span class="unit">天</span></div>
+      <div style="font-size:12px;color:var(--text-2);margin-top:6px;">${esc(firstTxt)}最长纪录 <span style="color:var(--text)">${longestStreak} 天</span>。</div>
+      <div class="streak-bars" id="streak-bars"></div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:9.5px;color:var(--text-3);letter-spacing:0.18em;text-transform:uppercase;">last 30 days</div>
+    `;
+  }
+
+  function renderStreakBars(dateSet) {
+    const bars = document.getElementById('streak-bars');
+    if (!bars) return;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const html = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const has = dateSet.has(toDateStr(d));
+      if (has) {
+        const h = 55 + ((i * 29) % 45);
+        html.push(`<span class="on" style="height:${h}%"></span>`);
+      } else {
+        html.push(`<span class="off" style="height:30%"></span>`);
+      }
+    }
+    bars.innerHTML = html.join('');
+  }
+
+  function renderBlockCountsCard() {
+    const side = document.querySelectorAll('.diary-layout aside .side-card');
+    if (side.length < 2) return;
+    side[1].innerHTML = `
+      <div class="kicker">Block Counts · 块数</div>
+      <div style="margin-top:14px;font-size:12px;color:var(--text-3);line-height:1.7;padding:8px 0 4px;">
+        真实 diary 为整段 markdown，未做 AAAK 分块。等后续结构化后接入。
+      </div>
+    `;
+  }
+
+  function renderLinkedDrawersCard() {
+    const side = document.querySelectorAll('.diary-layout aside .side-card');
+    if (side.length < 3) return;
+    side[2].innerHTML = `
+      <div class="kicker">Linked Drawers · 此刻</div>
+      <div style="margin-top:14px;font-size:12px;color:var(--text-3);line-height:1.7;padding:8px 0 4px;">
+        tunnel 推荐待 PR 后期接入。
+      </div>
+    `;
+  }
+
+  function renderFatalError(err) {
+    const content = document.querySelector('.content');
+    if (!content) return;
+    const msg = err && err.message ? err.message : String(err);
+    content.innerHTML = `<div style="padding:40px;color:var(--camellia-text);font-size:13px;">diary 加载失败: ${esc(msg)}</div>`;
+  }
+
+  // ---------- init ----------
+  async function init() {
+    let diaryData;
+    try {
+      diaryData = await window.KaguyaAPI.getDiary();
+    } catch (err) {
+      console.error('getDiary failed:', err);
+      renderFatalError(err);
+      return;
+    }
+
+    const entries = (diaryData && Array.isArray(diaryData.entries))
+      ? diaryData.entries
+      : (Array.isArray(diaryData) ? diaryData : []);
+
+    const entriesByDate = new Map();
+    const dateSet = new Set();
+    entries.forEach((e) => {
+      const date = e && e.date;
+      if (!date) return;
+      dateSet.add(date);
+      entriesByDate.set(date, (entriesByDate.get(date) || 0) + 1);
+    });
+
+    const totalDays = dateSet.size;
+    const totalEntries = entries.length;
+    const currentStreak = computeCurrentStreak(dateSet);
+    const longestStreak = computeLongestStreak(dateSet);
+
+    try { renderPageHead(totalDays, totalEntries, currentStreak, longestStreak); } catch (e) { console.error('pageHead:', e); }
+    try { renderHeatmapHead(); } catch (e) { console.error('heatmapHead:', e); }
+    try { renderHeatmap(entriesByDate); } catch (e) { console.error('heatmap:', e); }
+    try { renderTodaySectionHead(entries[0]); } catch (e) { console.error('todayHead:', e); }
+    try { renderToday(entries[0]); } catch (e) { console.error('today:', e); }
+    try { renderPastWeek(entries); } catch (e) { console.error('pastWeek:', e); }
+    try { renderStreakCard(dateSet, currentStreak, longestStreak); } catch (e) { console.error('streak:', e); }
+    try { renderStreakBars(dateSet); } catch (e) { console.error('streakBars:', e); }
+    try { renderBlockCountsCard(); } catch (e) { console.error('blockCounts:', e); }
+    try { renderLinkedDrawersCard(); } catch (e) { console.error('linked:', e); }
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
 })();
 </script>
 </body>
