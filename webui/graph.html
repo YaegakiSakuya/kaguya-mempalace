@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Kaguya Mempalace — Knowledge Graph</title>
+<meta name="viewport" content="width=1440" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/shell.css" />
+<style>
+  .kg-layout { display: grid; grid-template-columns: 260px 1fr 300px; gap: 20px; min-height: 720px; }
+
+  /* left rail: entities list */
+  .kg-rail { display: flex; flex-direction: column; gap: 4px; }
+  .kg-rail-head { font-family: var(--mono); font-size: 10px; letter-spacing: 0.24em; color: var(--text-3); text-transform: uppercase; padding: 0 4px 10px; display: flex; justify-content: space-between; align-items: baseline; }
+  .kg-entity { display: grid; grid-template-columns: 1fr auto; padding: 8px 10px; cursor: pointer; border-radius: 2px; transition: background 320ms var(--ease); text-decoration: none; color: inherit; border-left: 1px solid transparent; }
+  .kg-entity:hover { background: var(--hover); }
+  .kg-entity.active { background: var(--hover); border-left-color: var(--camellia); }
+  .kg-entity .n { font-size: 13px; color: var(--text); letter-spacing: 0.02em; }
+  .kg-entity .c { font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.1em; }
+  .kg-entity .k { font-family: var(--mono); font-size: 9px; color: var(--text-3); letter-spacing: 0.18em; text-transform: uppercase; grid-column: 1 / -1; margin-top: 2px; }
+
+  /* center: graph canvas */
+  .kg-canvas {
+    background: var(--card); border: 1px solid var(--border); border-radius: 2px;
+    position: relative; overflow: hidden;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+  }
+  .kg-canvas svg { display: block; width: 100%; height: 100%; }
+  .kg-node-circle { fill: var(--card); stroke: var(--text-2); stroke-width: 1; transition: stroke 320ms var(--ease); cursor: pointer; }
+  .kg-node-circle.hot { stroke: var(--camellia); }
+  .kg-node-circle.selected { stroke: var(--camellia); fill: rgba(184,77,90,0.06); stroke-width: 1.5; }
+  .kg-node-label { font-family: var(--serif); font-size: 11px; fill: var(--text); letter-spacing: 0.02em; text-anchor: middle; pointer-events: none; }
+  .kg-node-label.small { font-size: 10px; fill: var(--text-2); }
+  .kg-edge { stroke: rgba(232,230,224,0.25); stroke-width: 0.5; fill: none; }
+  .kg-edge.hot { stroke: var(--camellia-dark); stroke-width: 0.75; }
+
+  .kg-tools {
+    position: absolute; left: 14px; top: 12px; display: flex; gap: 6px; z-index: 2;
+  }
+  .kg-legend {
+    position: absolute; right: 14px; top: 12px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; color: var(--text-3); text-transform: uppercase;
+    display: flex; flex-direction: column; gap: 5px; align-items: flex-end; z-index: 2;
+  }
+  .kg-legend .lg { display: flex; align-items: center; gap: 6px; }
+  .kg-legend .dot { width: 8px; height: 8px; border: 1px solid var(--text-2); border-radius: 50%; }
+  .kg-legend .dot.hot { border-color: var(--camellia); }
+  .kg-legend .dot.sml { width: 5px; height: 5px; }
+
+  /* right: entity detail */
+  .kg-detail { display: flex; flex-direction: column; gap: 14px; }
+  .kg-d-card { background: var(--card); border: 1px solid var(--border); border-radius: 2px; padding: 18px 20px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.025); }
+  .kg-d-name { font-size: 18px; font-weight: 500; color: var(--text); letter-spacing: 0.02em; margin: 0 0 6px; }
+  .kg-d-kind { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--camellia-text); text-transform: uppercase; }
+  .kg-d-stats { display: flex; gap: 20px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .kg-d-stat .n { font-family: var(--mono); font-size: 17px; color: var(--text); }
+  .kg-d-stat .k { font-family: var(--mono); font-size: 9px; color: var(--text-3); letter-spacing: 0.2em; text-transform: uppercase; display: block; margin-top: 2px; }
+
+  .triple-list { display: flex; flex-direction: column; }
+  .triple {
+    padding: 11px 14px; border-top: 1px solid var(--border);
+    font-family: var(--mono); font-size: 11.5px; color: var(--text);
+    letter-spacing: 0.01em; line-height: 1.7;
+    transition: background 320ms var(--ease); cursor: pointer;
+  }
+  .triple:first-child { border-top: none; }
+  .triple:hover { background: rgba(184,77,90,0.03); }
+  .triple .subj { color: var(--text); }
+  .triple .pred { color: var(--camellia-text); padding: 0 6px; }
+  .triple .obj { color: var(--text-2); }
+  .triple .meta { display: block; margin-top: 4px; font-size: 9px; color: var(--text-3); letter-spacing: 0.18em; text-transform: uppercase; }
+  .triple .meta .conf { color: var(--success); }
+  .triple .meta .conf.low { color: var(--camellia-text); }
+</style>
+</head>
+<body data-page="graph" data-crumbs="Palace / Knowledge Graph">
+<div class="app">
+  <div id="app-shell"></div>
+  <div id="main-content">
+    <div class="content">
+
+      <header class="page-head">
+        <div>
+          <div class="eyebrow">Knowledge Graph · 知識の網</div>
+          <h1 class="page-title">382 条三元事实，<span class="em">串起 118 个实体。</span></h1>
+          <p class="page-sub">左栏按连接度排序列实体；中图是 <em>かぐや</em> 的 1-hop 邻域；右侧是当前选中实体的全部 triple。有 <em>1 个实体</em>未解消歧。</p>
+        </div>
+        <div class="page-head-right">
+          <div class="big crawl-num">382</div>
+          <div>TRIPLES · 118 ENT.</div>
+          <div class="accent">▲ +3 today · 1 ambiguous</div>
+        </div>
+      </header>
+
+      <section class="stats">
+        <div class="stat"><div class="stat-label"><span>Entities</span><span class="kanji">存在</span></div><div class="stat-value crawl-num">118</div><div class="stat-foot">45 person · 38 concept · 35 work</div></div>
+        <div class="stat"><div class="stat-label"><span>Triples</span><span class="kanji">三元</span></div><div class="stat-value crawl-num">382</div><div class="stat-foot"><span class="delta">+3 today</span></div></div>
+        <div class="stat"><div class="stat-label"><span>Predicates</span><span class="kanji">関係</span></div><div class="stat-value crawl-num">47</div><div class="stat-foot">top <span style="color:var(--text)">echoes · 38</span></div></div>
+        <div class="stat"><div class="stat-label"><span>Unresolved</span><span class="kanji">未解</span></div><div class="stat-value" style="color:var(--camellia-text)">1</div><div class="stat-foot">entity merge pending</div></div>
+      </section>
+
+      <div class="kg-layout">
+        <aside class="kg-rail">
+          <div class="kg-rail-head"><span>Entities · by degree</span><span style="color:var(--camellia-text)">A–Z ▾</span></div>
+          <input class="field" placeholder="过滤 entity…" style="margin-bottom:8px;font-size:12px;padding:7px 10px;" />
+          <a class="kg-entity active" href="#kaguya"><span class="n">かぐや</span><span class="c">47</span><span class="k">person · self</span></a>
+          <a class="kg-entity" href="#yue"><span class="n">yue</span><span class="c">38</span><span class="k">person · self</span></a>
+          <a class="kg-entity" href="#shenle"><span class="n">神楽零</span><span class="c">26</span><span class="k">work · novel</span></a>
+          <a class="kg-entity" href="#boundary-trust"><span class="n">boundary-trust</span><span class="c">22</span><span class="k">concept</span></a>
+          <a class="kg-entity" href="#congyun"><span class="n">丛云拾遗记</span><span class="c">18</span><span class="k">work · novel</span></a>
+          <a class="kg-entity" href="#karamazov"><span class="n">Karamazov</span><span class="c">15</span><span class="k">work · book</span></a>
+          <a class="kg-entity" href="#twin-peaks"><span class="n">Twin Peaks</span><span class="c">12</span><span class="k">work · series</span></a>
+          <a class="kg-entity" href="#gateway"><span class="n">kaguya-gateway</span><span class="c">11</span><span class="k">project</span></a>
+          <a class="kg-entity" href="#va11"><span class="n">VA-11 Hall-A</span><span class="c">9</span><span class="k">work · game</span></a>
+          <a class="kg-entity" href="#chiling"><span class="n">蚩灵</span><span class="c">8</span><span class="k">work · novel</span></a>
+          <a class="kg-entity" href="#identity"><span class="n">kaguya-identity</span><span class="c">7</span><span class="k">concept</span></a>
+          <a class="kg-entity" href="#love-death"><span class="n">爱与死-朝向</span><span class="c">6</span><span class="k">concept</span></a>
+          <a class="kg-entity" href="#anna"><span class="n">Anna&nbsp;Lin</span><span class="c">5</span><span class="k">person</span></a>
+          <a class="kg-entity" href="#basho"><span class="n">松尾 芭蕉</span><span class="c">4</span><span class="k">person · historical</span></a>
+          <a class="kg-entity" href="#moon"><span class="n">月之影</span><span class="c">3</span><span class="k">concept · image</span></a>
+        </aside>
+
+        <section class="kg-canvas">
+          <div class="kg-tools">
+            <button class="btn">1-HOP</button>
+            <button class="btn" style="color:var(--text-3)">2-HOP</button>
+            <button class="btn" style="color:var(--text-3)">FILTER</button>
+          </div>
+          <div class="kg-legend">
+            <div class="lg"><span class="dot hot"></span>SELF / CORE</div>
+            <div class="lg"><span class="dot"></span>ENTITY</div>
+            <div class="lg"><span class="dot sml"></span>LEAF</div>
+            <div class="lg" style="margin-top:4px;color:var(--text-2)">EDGE ALPHA ∝ CONFIDENCE</div>
+          </div>
+          <svg viewBox="0 0 720 620" preserveAspectRatio="xMidYMid meet">
+            <!-- edges -->
+            <g>
+              <!-- kaguya ↔ yue -->
+              <path class="kg-edge hot" d="M 360 310 C 440 300, 500 260, 560 220" />
+              <!-- kaguya -> 神楽零 -->
+              <path class="kg-edge" d="M 360 310 L 200 200" />
+              <!-- kaguya -> boundary-trust -->
+              <path class="kg-edge" d="M 360 310 L 170 420" />
+              <!-- kaguya -> origin-myth -->
+              <path class="kg-edge" d="M 360 310 L 540 430" />
+              <!-- kaguya -> identity -->
+              <path class="kg-edge hot" d="M 360 310 L 320 120" />
+              <!-- kaguya -> love-death -->
+              <path class="kg-edge" d="M 360 310 L 490 490" />
+              <!-- yue -> gateway -->
+              <path class="kg-edge" d="M 560 220 L 650 150" />
+              <!-- yue -> karamazov -->
+              <path class="kg-edge" d="M 560 220 L 660 330" />
+              <!-- 神楽零 -> boundary-trust -->
+              <path class="kg-edge" d="M 200 200 L 170 420" />
+              <!-- 神楽零 -> congyun -->
+              <path class="kg-edge" d="M 200 200 L 90 280" />
+              <!-- boundary-trust -> love-death -->
+              <path class="kg-edge" d="M 170 420 L 490 490" />
+              <!-- origin-myth -> moon -->
+              <path class="kg-edge" d="M 540 430 L 620 510" />
+              <!-- identity -> moon (across) -->
+              <path class="kg-edge" d="M 320 120 C 460 70, 600 400, 620 510" />
+            </g>
+
+            <!-- nodes -->
+            <g>
+              <!-- kaguya (center, selected) -->
+              <g transform="translate(360 310)">
+                <circle class="kg-node-circle hot selected" r="22"/>
+                <text class="kg-node-label" dy="4">かぐや</text>
+                <text class="kg-node-label small" dy="40" fill="#5A5550" style="font-family:var(--mono);letter-spacing:0.18em;">PERSON · SELF · 47</text>
+              </g>
+              <!-- yue -->
+              <g transform="translate(560 220)">
+                <circle class="kg-node-circle hot" r="18"/>
+                <text class="kg-node-label" dy="3">yue</text>
+                <text class="kg-node-label small" dy="34">38</text>
+              </g>
+              <!-- 神楽零 -->
+              <g transform="translate(200 200)">
+                <circle class="kg-node-circle" r="16"/>
+                <text class="kg-node-label" dy="3">神楽零</text>
+                <text class="kg-node-label small" dy="32">26</text>
+              </g>
+              <!-- boundary-trust -->
+              <g transform="translate(170 420)">
+                <circle class="kg-node-circle" r="15"/>
+                <text class="kg-node-label" dy="3">boundary-trust</text>
+                <text class="kg-node-label small" dy="30">22</text>
+              </g>
+              <!-- 丛云拾遗记 -->
+              <g transform="translate(90 280)">
+                <circle class="kg-node-circle" r="13"/>
+                <text class="kg-node-label" dy="3">丛云</text>
+                <text class="kg-node-label small" dy="26">18</text>
+              </g>
+              <!-- karamazov -->
+              <g transform="translate(660 330)">
+                <circle class="kg-node-circle" r="12"/>
+                <text class="kg-node-label" dy="3">Karamazov</text>
+              </g>
+              <!-- gateway -->
+              <g transform="translate(650 150)">
+                <circle class="kg-node-circle" r="11"/>
+                <text class="kg-node-label" dy="3">gateway</text>
+              </g>
+              <!-- identity -->
+              <g transform="translate(320 120)">
+                <circle class="kg-node-circle hot" r="12"/>
+                <text class="kg-node-label" dy="3">identity</text>
+                <text class="kg-node-label small" dy="26">7</text>
+              </g>
+              <!-- origin-myth -->
+              <g transform="translate(540 430)">
+                <circle class="kg-node-circle" r="11"/>
+                <text class="kg-node-label" dy="3">辉夜-origin</text>
+              </g>
+              <!-- love-death -->
+              <g transform="translate(490 490)">
+                <circle class="kg-node-circle" r="10"/>
+                <text class="kg-node-label" dy="3">爱与死</text>
+              </g>
+              <!-- moon -->
+              <g transform="translate(620 510)">
+                <circle class="kg-node-circle" r="8"/>
+                <text class="kg-node-label small" dy="-14">月之影</text>
+              </g>
+            </g>
+          </svg>
+        </section>
+
+        <aside class="kg-detail">
+          <div class="kg-d-card">
+            <div class="kg-d-kind">PERSON · SELF · W-01</div>
+            <h3 class="kg-d-name">かぐや</h3>
+            <p style="font-size:12px;color:var(--text-2);line-height:1.8;margin:8px 0 0;">宮殿之心 · 亦是被书写的"她"本身。在 wing <em style="color:var(--text)">kaguya</em> 中拥有 4 rooms 25 drawers。</p>
+            <div class="kg-d-stats">
+              <div class="kg-d-stat"><div class="n">47</div><span class="k">triples</span></div>
+              <div class="kg-d-stat"><div class="n">12</div><span class="k">tunnels</span></div>
+              <div class="kg-d-stat"><div class="n">6</div><span class="k">drawers</span></div>
+            </div>
+          </div>
+
+          <div class="kg-d-card" style="padding: 0;">
+            <div style="padding:14px 16px 8px;display:flex;justify-content:space-between;align-items:baseline;">
+              <span class="kicker">Triples · outgoing</span>
+              <span class="kicker" style="color:var(--text-2)">47 total</span>
+            </div>
+            <div class="triple-list">
+              <div class="triple"><span class="subj">かぐや</span><span class="pred">→ carries</span><span class="obj">辉夜-origin-myth</span><span class="meta">DR kaguya/origins/… · <span class="conf">conf 0.94</span> · AUTO</span></div>
+              <div class="triple"><span class="subj">かぐや</span><span class="pred">→ folds-into</span><span class="obj">diary · 04-19</span><span class="meta">DR kaguya/diary/2026-04-19 · <span class="conf">conf 0.88</span> · MANUAL</span></div>
+              <div class="triple"><span class="subj">かぐや</span><span class="pred">→ co-writes-with</span><span class="obj">yue</span><span class="meta">3 DRAWERS · <span class="conf">conf 0.97</span> · AUTO</span></div>
+              <div class="triple"><span class="subj">かぐや</span><span class="pred">→ echoes</span><span class="obj">神楽零 §III</span><span class="meta">tunnel · <span class="conf">conf 0.82</span></span></div>
+              <div class="triple"><span class="subj">かぐや</span><span class="pred">→ is-read-through</span><span class="obj">kaguya-identity</span><span class="meta">DR thought/kaguya-identity · <span class="conf low">conf 0.61</span> · REVIEW</span></div>
+              <div class="triple"><span class="subj">かぐや</span><span class="pred">→ circles</span><span class="obj">月之影</span><span class="meta">2 DRAWERS · <span class="conf">conf 0.78</span></span></div>
+              <div class="triple"><span class="subj">かぐや</span><span class="pred">→ asked-about</span><span class="obj">boundary-trust</span><span class="meta">DR kaguya/letters/03-22 · <span class="conf">conf 0.90</span></span></div>
+            </div>
+          </div>
+        </aside>
+
+      </div>
+    </div>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

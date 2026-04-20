@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Kaguya Mempalace — LLM Config</title>
+<meta name="viewport" content="width=1440" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/shell.css" />
+<style>
+  .llm-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr) 310px; gap: 20px; }
+
+  .prov-list { display: flex; flex-direction: column; gap: 2px; }
+  .prov-head { font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; color: var(--text-3); text-transform: uppercase; padding: 0 4px 10px; display:flex; justify-content:space-between; align-items:baseline; }
+  .prov {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+    padding: 12px 14px; cursor: pointer; border-radius: 2px;
+    border: 1px solid transparent;
+    text-decoration: none; color: inherit;
+    transition: background 320ms var(--ease), border-color 320ms var(--ease);
+  }
+  .prov:hover { background: var(--hover); }
+  .prov.active { background: var(--hover); border-color: var(--border-strong); }
+  .prov-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+  .prov-dot.off { background: var(--text-3); }
+  .prov-dot.warn { background: var(--camellia); }
+  .prov-name { font-size: 13.5px; color: var(--text); }
+  .prov-model { font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.1em; margin-top: 2px; }
+  .prov-role { font-family: var(--mono); font-size: 9px; color: var(--camellia-text); letter-spacing: 0.2em; text-transform: uppercase; }
+
+  .cfg { background: var(--card); border: 1px solid var(--border); border-radius: 2px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.025); min-width: 0; }
+  .cfg-head { padding: 22px 26px 18px; border-bottom: 1px solid var(--border); display:flex; align-items:flex-end; justify-content:space-between; gap: 24px; }
+  .cfg-name { font-size: 20px; color: var(--text); margin: 0 0 4px; letter-spacing: 0.02em; }
+  .cfg-sub { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); letter-spacing: 0.18em; text-transform: uppercase; }
+  .cfg-badges { display: flex; gap: 8px; }
+
+  .cfg-body { padding: 6px 26px 22px; }
+  .cfg-row { display: grid; grid-template-columns: 180px 1fr; gap: 18px; padding: 16px 0; border-top: 1px solid var(--border); align-items: baseline; }
+  .cfg-row:first-of-type { border-top: none; }
+  .cfg-k { font-family: var(--mono); font-size: 10.5px; color: var(--text-2); letter-spacing: 0.18em; text-transform: uppercase; }
+  .cfg-k .hint { display: block; color: var(--text-3); font-size: 9.5px; letter-spacing: 0.15em; margin-top: 3px; text-transform: none; }
+  .cfg-v { font-size: 13.5px; color: var(--text); line-height: 1.7; }
+  .cfg-v .mono { font-family: var(--mono); font-size: 12px; }
+
+  .slider { position: relative; height: 24px; }
+  .slider .track { position: absolute; left: 0; right: 0; top: 11px; height: 1px; background: var(--border-mid); }
+  .slider .fill { position: absolute; left: 0; top: 11px; height: 1px; background: var(--camellia); }
+  .slider .knob { position: absolute; top: 6px; width: 12px; height: 12px; border: 1px solid var(--camellia); background: var(--card); border-radius: 50%; }
+  .slider-meta { display: flex; justify-content: space-between; margin-top: 4px; font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.1em; }
+
+  .role-matrix { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 6px; }
+  .role-cell { border: 1px solid var(--border); padding: 10px 12px; border-radius: 2px; cursor: pointer; transition: border-color 320ms var(--ease); }
+  .role-cell:hover { border-color: var(--border-strong); }
+  .role-cell.on { border-color: var(--camellia-dark); background: rgba(184,77,90,0.04); }
+  .role-cell .t { font-family: var(--mono); font-size: 9.5px; color: var(--text-3); letter-spacing: 0.22em; text-transform: uppercase; }
+  .role-cell.on .t { color: var(--camellia-text); }
+  .role-cell .v { font-size: 12.5px; color: var(--text); margin-top: 4px; }
+
+  .json-panel { background: var(--card); border: 1px solid var(--border); border-radius: 2px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.025); }
+  .json-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display:flex; justify-content:space-between; align-items:baseline; }
+  .json-body {
+    padding: 14px 18px;
+    font-family: var(--mono); font-size: 11px; color: var(--text); line-height: 1.85;
+    white-space: pre; overflow-x: auto;
+    letter-spacing: 0.01em;
+  }
+  .json-body .k { color: var(--camellia-text); }
+  .json-body .s { color: var(--text); }
+  .json-body .n { color: var(--violet); }
+  .json-body .c { color: var(--text-3); }
+  .json-body .b { color: var(--success); }
+  .json-body .p { color: var(--text-2); }
+
+  .usage { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .usage-cell { border: 1px solid var(--border); padding: 12px 14px; border-radius: 2px; }
+  .usage-cell .k { font-family: var(--mono); font-size: 9px; color: var(--text-3); letter-spacing: 0.22em; text-transform: uppercase; }
+  .usage-cell .n { font-family: var(--mono); font-size: 20px; color: var(--text); margin-top: 4px; letter-spacing: 0.02em; }
+  .usage-cell .s { font-family: var(--mono); font-size: 10px; color: var(--text-2); margin-top: 4px; letter-spacing: 0.1em; }
+
+  .secret-field { font-family: var(--mono); font-size: 12.5px; color: var(--text-2); letter-spacing: 0.1em; border: 1px solid var(--border); padding: 8px 12px; border-radius: 2px; background: rgba(20,20,24,0.55); display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .secret-field > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .secret-field .toggle { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--camellia-text); letter-spacing: 0.18em; text-transform: uppercase; cursor: pointer; }
+</style>
+</head>
+<body data-page="llm" data-crumbs="Palace / LLM Config">
+<div class="app">
+  <div id="app-shell"></div>
+  <div id="main-content">
+    <div class="content">
+
+      <header class="page-head">
+        <div>
+          <div class="eyebrow">LLM Config · 言語模型設定</div>
+          <h1 class="page-title">三个 provider，<span class="em">五个角色。</span></h1>
+          <p class="page-sub">角色即用途：<em>chat</em> / <em>extract</em> / <em>embed</em> / <em>summarize</em> / <em>rename</em>。不同 wing 可以指定覆盖默认 provider。</p>
+        </div>
+        <div class="page-head-right">
+          <div class="big">3 <span style="font-size:13px;color:var(--text-3)">/ 5</span></div>
+          <div>PROVIDERS · ROLES</div>
+          <div class="accent">● ALL HEALTHY</div>
+        </div>
+      </header>
+
+      <div class="llm-layout">
+
+        <!-- providers list -->
+        <aside>
+          <div class="prov-head"><span>Providers</span><span style="color:var(--camellia-text)">+ ADD</span></div>
+          <div class="prov-list">
+            <a class="prov active" href="#anthropic">
+              <span class="prov-dot"></span>
+              <div>
+                <div class="prov-name">Anthropic</div>
+                <div class="prov-model">claude-sonnet-4.5</div>
+              </div>
+              <div class="prov-role">chat · extract</div>
+            </a>
+            <a class="prov" href="#openai">
+              <span class="prov-dot"></span>
+              <div>
+                <div class="prov-name">OpenAI</div>
+                <div class="prov-model">text-embedding-3-large</div>
+              </div>
+              <div class="prov-role">embed</div>
+            </a>
+            <a class="prov" href="#local">
+              <span class="prov-dot warn"></span>
+              <div>
+                <div class="prov-name">local · ollama</div>
+                <div class="prov-model">qwen2.5:14b</div>
+              </div>
+              <div class="prov-role">summarize · rename</div>
+            </a>
+          </div>
+
+          <div class="prov-head" style="margin-top: 20px;"><span>Roles</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <div class="prov"><span class="prov-dot"></span><div><div class="prov-name">chat</div><div class="prov-model">drawer 对话 · 写作协助</div></div></div>
+            <div class="prov"><span class="prov-dot"></span><div><div class="prov-name">extract</div><div class="prov-model">triple 抽取 · entity 识别</div></div></div>
+            <div class="prov"><span class="prov-dot"></span><div><div class="prov-name">embed</div><div class="prov-model">语义索引 · 搜索</div></div></div>
+            <div class="prov"><span class="prov-dot warn"></span><div><div class="prov-name">summarize</div><div class="prov-model">AAAK 聚合 · drawer 摘要</div></div></div>
+            <div class="prov"><span class="prov-dot warn"></span><div><div class="prov-name">rename</div><div class="prov-model">自动命名 drawer / room</div></div></div>
+          </div>
+        </aside>
+
+        <!-- main config panel -->
+        <section class="cfg">
+          <div class="cfg-head">
+            <div>
+              <h2 class="cfg-name">Anthropic · claude-sonnet-4.5</h2>
+              <div class="cfg-sub">PROVIDER · chat · extract</div>
+            </div>
+            <div class="cfg-badges">
+              <span class="chip ok">● healthy</span>
+              <span class="chip">cache hit 78%</span>
+              <span class="chip">lat p95 &nbsp; 1.2s</span>
+            </div>
+          </div>
+
+          <div class="cfg-body">
+            <div class="cfg-row">
+              <div class="cfg-k">API Key <span class="hint">encrypted at rest</span></div>
+              <div class="cfg-v">
+                <div class="secret-field">
+                  <span>sk-ant-api03-•••••••••••••••••••••••••••••••-a4f9</span>
+                  <span class="toggle">ROTATE</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="cfg-row">
+              <div class="cfg-k">Base URL <span class="hint">optional proxy</span></div>
+              <div class="cfg-v"><span class="mono" style="color:var(--text-2)">https://api.anthropic.com</span></div>
+            </div>
+
+            <div class="cfg-row">
+              <div class="cfg-k">Model <span class="hint">per-role override below</span></div>
+              <div class="cfg-v">
+                <span class="chip hot" style="margin-right:6px;">claude-sonnet-4.5</span>
+                <span class="chip">claude-haiku-4.5</span>
+                <span class="chip">claude-opus-4</span>
+              </div>
+            </div>
+
+            <div class="cfg-row">
+              <div class="cfg-k">Temperature <span class="hint">creativity ↔ fidelity</span></div>
+              <div class="cfg-v">
+                <div class="slider">
+                  <div class="track"></div>
+                  <div class="fill" style="width:32%"></div>
+                  <div class="knob" style="left:calc(32% - 6px)"></div>
+                </div>
+                <div class="slider-meta"><span>0.0 · 事实</span><span>0.32</span><span>1.0 · 发散</span></div>
+              </div>
+            </div>
+
+            <div class="cfg-row">
+              <div class="cfg-k">Max tokens</div>
+              <div class="cfg-v">
+                <span class="mono">4096</span>
+                <span style="color:var(--text-3);font-family:var(--mono);font-size:11px;letter-spacing:0.1em;"> &nbsp; / &nbsp; 200,000 ctx</span>
+              </div>
+            </div>
+
+            <div class="cfg-row">
+              <div class="cfg-k">Role bindings <span class="hint">此 provider 承担</span></div>
+              <div class="cfg-v">
+                <div class="role-matrix">
+                  <div class="role-cell on"><div class="t">chat</div><div class="v">claude-sonnet-4.5</div></div>
+                  <div class="role-cell on"><div class="t">extract</div><div class="v">claude-haiku-4.5</div></div>
+                  <div class="role-cell"><div class="t">embed</div><div class="v" style="color:var(--text-3)">—</div></div>
+                  <div class="role-cell"><div class="t">summarize</div><div class="v" style="color:var(--text-3)">—</div></div>
+                  <div class="role-cell"><div class="t">rename</div><div class="v" style="color:var(--text-3)">—</div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="cfg-row">
+              <div class="cfg-k">System prompt <span class="hint">前置上下文 · 宫殿语气</span></div>
+              <div class="cfg-v">
+                <div style="border:1px solid var(--border);border-radius:2px;padding:14px 16px;background:rgba(20,20,24,0.55);font-family:var(--mono);font-size:11.5px;line-height:1.85;color:var(--text-2);max-height:120px;overflow-y:auto;">
+你正在协助 yue 书写 kaguya-mempalace——一座宋夜气质的长期记忆宫殿。语言层 <span style="color:var(--text)">简洁、克制、书卷气</span>，避免夸饰和现代营销腔。当以 かぐや 的身份出现时，语气温柔而稍有距离…
+                </div>
+              </div>
+            </div>
+
+            <div class="cfg-row">
+              <div class="cfg-k">Rate limit</div>
+              <div class="cfg-v">
+                <span class="mono">50 rpm</span>
+                <span style="color:var(--text-3);margin:0 8px;">·</span>
+                <span class="mono">40,000 tpm</span>
+                <span class="delta" style="margin-left:12px">● under limit</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- json snapshot + usage -->
+        <aside>
+          <div class="json-panel">
+            <div class="json-head">
+              <span class="kicker">Config · kaguya.toml</span>
+              <span class="kicker" style="color:var(--camellia-text);cursor:pointer;">COPY</span>
+            </div>
+            <div class="json-body"><span class="c"># llm.providers.anthropic</span>
+<span class="k">api_key</span>       = <span class="s">"sk-ant-…a4f9"</span>
+<span class="k">model</span>         = <span class="s">"claude-sonnet-4.5"</span>
+<span class="k">temperature</span>   = <span class="n">0.32</span>
+<span class="k">max_tokens</span>    = <span class="n">4096</span>
+<span class="k">roles</span>         = [<span class="s">"chat"</span>, <span class="s">"extract"</span>]
+
+<span class="c"># llm.providers.openai</span>
+<span class="k">api_key</span>       = <span class="s">"sk-…19bd"</span>
+<span class="k">model</span>         = <span class="s">"text-embed-3-l"</span>
+<span class="k">roles</span>         = [<span class="s">"embed"</span>]
+<span class="k">dim</span>           = <span class="n">3072</span>
+
+<span class="c"># llm.providers.local</span>
+<span class="k">base_url</span>      = <span class="s">"http://localhost:11434"</span>
+<span class="k">model</span>         = <span class="s">"qwen2.5:14b"</span>
+<span class="k">roles</span>         = [<span class="s">"summarize"</span>, <span class="s">"rename"</span>]
+<span class="k">streaming</span>     = <span class="b">true</span>
+
+<span class="c"># wing-level overrides</span>
+<span class="p">[wings.kaguya.llm]</span>
+<span class="k">chat_model</span>    = <span class="s">"claude-opus-4"</span>
+<span class="k">temperature</span>   = <span class="n">0.42</span>
+
+<span class="p">[wings.chats.llm]</span>
+<span class="k">summary_only</span>  = <span class="b">true</span></div>
+          </div>
+
+          <div class="json-panel" style="margin-top: 14px; padding: 18px 20px;">
+            <div class="kicker">Usage · this month</div>
+            <div class="usage">
+              <div class="usage-cell"><div class="k">Input tok</div><div class="n">2.14M</div><div class="s">anthropic · 82%</div></div>
+              <div class="usage-cell"><div class="k">Output tok</div><div class="n">412K</div><div class="s">anthropic · 78%</div></div>
+              <div class="usage-cell"><div class="k">Embeddings</div><div class="n">8,402</div><div class="s">openai · $0.27</div></div>
+              <div class="usage-cell"><div class="k">Local runs</div><div class="n">1,284</div><div class="s">ollama · free</div></div>
+            </div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10.5px;color:var(--text-2);letter-spacing:0.08em;">
+              estimated cost <span style="color:var(--text);">$18.42</span> · budget $40
+              <div style="height:1px;background:var(--border);margin-top:8px;position:relative;"><span style="position:absolute;left:0;top:0;bottom:0;width:46%;background:var(--camellia);"></span></div>
+            </div>
+          </div>
+
+          <div class="json-panel" style="margin-top: 14px; padding: 18px 20px;">
+            <div class="kicker">Health · last 24h</div>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px 16px;margin-top:14px;font-size:12px;">
+              <div style="color:var(--text)">Anthropic</div><div class="mono" style="color:var(--success)">● 100% · p95 1.2s</div>
+              <div style="color:var(--text)">OpenAI</div><div class="mono" style="color:var(--success)">● 100% · p95 0.3s</div>
+              <div style="color:var(--text)">local · ollama</div><div class="mono" style="color:var(--camellia-text)">● 94% · p95 4.8s</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

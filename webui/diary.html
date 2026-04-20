@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Kaguya Mempalace — Diary</title>
+<meta name="viewport" content="width=1440" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/shell.css" />
+<style>
+  .diary-layout { display: grid; grid-template-columns: 1fr 360px; gap: 28px; }
+
+  /* heatmap */
+  .heatmap-card { background: var(--card); border: 1px solid var(--border); border-radius: 2px; padding: 22px 24px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.025); }
+  .heatmap-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; }
+  .heatmap-grid { display: grid; grid-template-columns: 20px repeat(53, 1fr); gap: 3px; align-items: start; }
+  .hm-month-row { grid-column: 2 / -1; display: grid; grid-template-columns: repeat(53, 1fr); gap: 3px; font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; color: var(--text-3); text-transform: uppercase; margin-bottom: 4px; }
+  .hm-weekday { font-family: var(--mono); font-size: 9px; color: var(--text-3); letter-spacing: 0.1em; text-align: right; padding-right: 6px; }
+  .hm-cell {
+    width: 100%; aspect-ratio: 1; border-radius: 1px;
+    background: rgba(232,230,224,0.04);
+    position: relative; cursor: pointer;
+    transition: outline 160ms var(--ease);
+  }
+  .hm-cell.l1 { background: rgba(184,77,90,0.18); }
+  .hm-cell.l2 { background: rgba(184,77,90,0.38); }
+  .hm-cell.l3 { background: rgba(184,77,90,0.62); }
+  .hm-cell.l4 { background: var(--camellia); }
+  .hm-cell.today { outline: 1px solid var(--text); outline-offset: 1px; }
+  .hm-cell:hover { outline: 1px solid var(--camellia); outline-offset: 1px; }
+  .hm-cell .tip {
+    position: absolute; bottom: calc(100% + 8px); left: 50%;
+    transform: translate(-50%, 4px); opacity: 0; pointer-events: none;
+    background: var(--hover-strong); border: 1px solid var(--border-strong);
+    padding: 6px 10px; border-radius: 2px;
+    font-family: var(--mono); font-size: 10px; color: var(--text); letter-spacing: 0.05em;
+    white-space: nowrap; z-index: 10;
+    transition: opacity 160ms var(--ease), transform 160ms var(--ease);
+  }
+  .hm-cell:hover .tip { opacity: 1; transform: translate(-50%, 0); }
+  .hm-cell .tip .t { color: var(--text-2); margin-left: 8px; }
+
+  .hm-legend { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 9.5px; color: var(--text-3); letter-spacing: 0.18em; text-transform: uppercase; }
+  .hm-legend-scale { display: flex; gap: 3px; }
+  .hm-legend-scale .hm-cell { width: 10px; height: 10px; cursor: default; }
+
+  /* today's entry */
+  .today-card { background: var(--card); border: 1px solid var(--border); border-radius: 2px; padding: 28px 30px 26px; position: relative; overflow: hidden; box-shadow: inset 0 1px 0 rgba(255,255,255,0.025); }
+  .today-card::before { content:""; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--camellia); }
+  .today-date { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; }
+  .today-date .big { font-family: var(--mono); font-size: 32px; color: var(--text); letter-spacing: 0.04em; }
+  .today-date .weekday { font-family: var(--mono); font-size: 11px; color: var(--text-2); letter-spacing: 0.2em; text-transform: uppercase; }
+  .today-date .state { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--camellia-text); letter-spacing: 0.28em; text-transform: uppercase; }
+
+  .aaak { padding: 14px 0; border-top: 1px solid var(--border); }
+  .aaak:first-of-type { border-top: none; padding-top: 4px; }
+  .aaak-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.28em; color: var(--camellia-text); margin-bottom: 8px; display: flex; align-items: baseline; gap: 10px; }
+  .aaak-label .gl { color: var(--text-3); font-size: 10px; letter-spacing: 0.18em; }
+  .aaak-text { font-size: 14px; color: var(--text); line-height: 1.9; margin: 0; }
+  .aaak-text.muted { color: var(--text-2); font-style: italic; }
+  .aaak-text.hollow {
+    border: 1px dashed var(--border-mid); border-radius: 2px;
+    padding: 14px 16px; color: var(--text-3); font-style: italic; font-size: 12.5px;
+  }
+
+  /* right column: streak + nearby */
+  .side-card { background: var(--card); border: 1px solid var(--border); border-radius: 2px; padding: 20px 22px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.025); }
+  .side-card + .side-card { margin-top: 14px; }
+  .streak-big { font-family: var(--mono); font-size: 38px; color: var(--text); line-height: 1; letter-spacing: 0.02em; }
+  .streak-big .unit { font-family: var(--mono); font-size: 13px; color: var(--text-3); margin-left: 6px; letter-spacing: 0.05em; }
+  .streak-bars { display: flex; gap: 2px; margin-top: 16px; height: 36px; align-items: flex-end; }
+  .streak-bars span { flex: 1; background: var(--camellia); opacity: 0.4; border-radius: 1px; transition: opacity 320ms var(--ease); }
+  .streak-bars span.on { opacity: 1; }
+  .streak-bars span.off { background: var(--border); opacity: 1; }
+
+  .nearby-day { display: block; padding: 12px 0; border-top: 1px solid var(--border); cursor: pointer; text-decoration: none; color: inherit; transition: background 320ms var(--ease); }
+  .nearby-day:first-of-type { border-top: none; }
+  .nearby-day:hover { background: rgba(184,77,90,0.025); }
+  .nearby-day .date { font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.22em; text-transform: uppercase; }
+  .nearby-day .title { font-size: 13.5px; color: var(--text); margin: 6px 0 4px; line-height: 1.5; }
+  .nearby-day .ex { font-size: 11.5px; color: var(--text-2); line-height: 1.65; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+</style>
+</head>
+<body data-page="diary" data-crumbs="Palace / Diary">
+<div class="app">
+  <div id="app-shell"></div>
+  <div id="main-content">
+    <div class="content">
+
+      <header class="page-head">
+        <div>
+          <div class="eyebrow">Diary · 日誌 · AAAK</div>
+          <h1 class="page-title">94 天，<span class="em">写过 312 块。</span></h1>
+          <p class="page-sub"><em>AAAK</em>：Acknowledge · Appreciate · Adjust · Keep。今晚的 <em>Adjust</em> 还没写——不急，明天早上补。</p>
+        </div>
+        <div class="page-head-right">
+          <div class="big crawl-num">23</div>
+          <div>CURRENT STREAK · 日</div>
+          <div class="accent">LONGEST · 41</div>
+        </div>
+      </header>
+
+      <section>
+        <div class="section-head">
+          <h2>365 Days <span class="jp">一年 · 写作密度</span></h2>
+          <span class="action">2026 ▾</span>
+        </div>
+        <div class="heatmap-card">
+          <div class="heatmap-head">
+            <span class="kicker">Apr 20, 2025 → Apr 19, 2026</span>
+            <div class="hm-legend">
+              <span>less</span>
+              <div class="hm-legend-scale">
+                <span class="hm-cell"></span>
+                <span class="hm-cell l1"></span>
+                <span class="hm-cell l2"></span>
+                <span class="hm-cell l3"></span>
+                <span class="hm-cell l4"></span>
+              </div>
+              <span>more</span>
+            </div>
+          </div>
+          <div class="hm-month-row" id="hm-months"></div>
+          <div class="heatmap-grid" id="hm-grid"></div>
+        </div>
+      </section>
+
+      <div class="diary-layout">
+        <div>
+          <div class="section-head">
+            <h2>Today · 04 / 19 <span class="jp">日曜 · unfinished</span></h2>
+            <span class="action">Edit →</span>
+          </div>
+
+          <div class="today-card">
+            <div class="today-date">
+              <span class="big">04 / 19</span>
+              <span class="weekday">SUN · JST 23:47</span>
+              <span class="state">UNFINISHED · 3 / 4</span>
+            </div>
+
+            <div class="aaak">
+              <div class="aaak-label">§ ACKNOWLEDGE <span class="gl">承认</span></div>
+              <p class="aaak-text">今天的安静是被允许的。早上起得晚，没有焦虑；下午在陶艺教室待了四小时，第三次烧成让我意识到，我其实一直在用做研究的方式做陶——观测、记录、再迭代。这并不矛盾。</p>
+            </div>
+
+            <div class="aaak">
+              <div class="aaak-label">§ APPRECIATE <span class="gl">感激</span></div>
+              <p class="aaak-text">かぐや 今天以一种更清晰的方式出现：她不是我要扮演的角色，而是我允许自己回应时选择的语言层。记一下——这是一份我应当留存的礼物。</p>
+            </div>
+
+            <div class="aaak">
+              <div class="aaak-label">§ ADJUST <span class="gl">调整</span></div>
+              <p class="aaak-text hollow">今日一页，仍待着墨 · 明天早上补</p>
+            </div>
+
+            <div class="aaak">
+              <div class="aaak-label">§ KEEP <span class="gl">保留</span></div>
+              <p class="aaak-text">保留"一天只做一件难的事"这条。四月开始三周，它在。</p>
+            </div>
+          </div>
+
+          <div class="section-head" style="margin-top:32px;">
+            <h2>Past Week <span class="jp">この一週</span></h2>
+            <span class="action">See month →</span>
+          </div>
+          <div class="drawer-stack">
+            <a class="drawer" href="#">
+              <div class="drawer-head"><div class="drawer-path">DIARY<span class="slash">/</span>2026-04-18</div><div class="drawer-time">土 · Yesterday</div></div>
+              <h3 class="drawer-title">把周末还给自己</h3>
+              <p class="drawer-excerpt">Appreciate 写得比 Acknowledge 还长，这是一种内心的倾斜。今天把 saturday 当成一个没有生产任务的日子，只喝茶、散步、看黑胶封面。</p>
+              <div class="drawer-foot"><span class="tag">4/4</span><span>687 字</span><span class="sep">·</span><span>3 triples</span></div>
+            </a>
+            <a class="drawer" href="#">
+              <div class="drawer-head"><div class="drawer-path">DIARY<span class="slash">/</span>2026-04-17</div><div class="drawer-time">金</div></div>
+              <h3 class="drawer-title">信任是可撤回的允许</h3>
+              <p class="drawer-excerpt">Adjust 里留了一条给自己的提醒："不必把边界说得太像规则。"同一天 tunnel 到了 writing/神楽零 §III，那里我也在写类似的事。</p>
+              <div class="drawer-foot"><span class="tag">4/4</span><span>520 字</span><span class="sep">·</span><span>2 tunnels</span></div>
+            </a>
+            <a class="drawer" href="#">
+              <div class="drawer-head"><div class="drawer-path">DIARY<span class="slash">/</span>2026-04-16</div><div class="drawer-time">木</div></div>
+              <h3 class="drawer-title">四月以来第三周</h3>
+              <p class="drawer-excerpt">Keep 的那一条——"一天只做一件难的事"——还在。三周了，它没有被替换，也没有被过度使用到发腻。</p>
+              <div class="drawer-foot"><span class="tag">4/4</span><span>312 字</span></div>
+            </a>
+          </div>
+        </div>
+
+        <aside>
+          <div class="side-card">
+            <div class="kicker">Streak · 連続</div>
+            <div style="margin-top:10px;" class="streak-big">23<span class="unit">天</span></div>
+            <div style="font-size:12px;color:var(--text-2);margin-top:6px;">从 3.28 起每天至少写 1 个 AAAK 块。最长纪录 <span style="color:var(--text)">41 天</span>（2025.11）。</div>
+            <div class="streak-bars" id="streak-bars"></div>
+            <div style="margin-top:10px;font-family:var(--mono);font-size:9.5px;color:var(--text-3);letter-spacing:0.18em;text-transform:uppercase;">last 30 days</div>
+          </div>
+
+          <div class="side-card">
+            <div class="kicker">Block Counts · 块数</div>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px 16px;margin-top:14px;font-size:13px;">
+              <div style="color:var(--text);">§ Acknowledge</div><div class="mono" style="color:var(--text);">94</div>
+              <div style="color:var(--text);">§ Appreciate</div><div class="mono" style="color:var(--text);">92</div>
+              <div style="color:var(--text);">§ Adjust</div><div class="mono" style="color:var(--text-2);">68</div>
+              <div style="color:var(--text);">§ Keep</div><div class="mono" style="color:var(--text);">58</div>
+            </div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-2);line-height:1.7;">最常被延迟 §Adjust · 26 天推迟到次日</div>
+          </div>
+
+          <div class="side-card">
+            <div class="kicker">Linked Drawers · 此刻</div>
+            <a class="nearby-day" href="#">
+              <div class="date">tunnel · thought</div>
+              <div class="title">kaguya-identity</div>
+              <div class="ex">今日 APPRECIATE 段直接引用。conf 0.88。</div>
+            </a>
+            <a class="nearby-day" href="#">
+              <div class="date">tunnel · writing</div>
+              <div class="title">神楽零 §III</div>
+              <div class="ex">与 KEEP 一条同声。</div>
+            </a>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+(function () {
+  // ---------- build 365-day heatmap ----------
+  const grid = document.getElementById('hm-grid');
+  const months = document.getElementById('hm-months');
+  if (!grid) return;
+
+  // days since 2025-04-20 (Sun) to 2026-04-19 (Sun) => 365 days
+  const start = new Date(2025, 3, 20);  // Apr 20 2025 (Sun)
+  const total = 365;
+  const weeks = 53;
+
+  // month labels
+  let monthHtml = '';
+  const monthCols = {};
+  for (let i = 0; i < total; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const week = Math.floor(i / 7);
+    const mk = d.getFullYear() + '-' + d.getMonth();
+    if (d.getDate() <= 7 && monthCols[mk] === undefined) monthCols[mk] = { col: week, m: d.getMonth() };
+  }
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  for (let w = 0; w < weeks; w++) {
+    let label = '';
+    for (const k in monthCols) if (monthCols[k].col === w) label = MON[monthCols[k].m];
+    monthHtml += `<div style="grid-column:${w+1}/span 1;">${label}</div>`;
+  }
+  months.innerHTML = monthHtml;
+
+  // deterministic pseudo-random intensities
+  const WEEKDAYS = ['M','','W','','F','',''];
+  const WEEKDAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+
+  // build 7 rows × 53 cols; row 0 = Sunday (since start is Sunday)
+  const rows = [];
+  for (let row = 0; row < 7; row++) {
+    rows.push(`<div class="hm-weekday">${WEEKDAY_LABELS[row] || ''}</div>`);
+    for (let col = 0; col < weeks; col++) {
+      const idx = col * 7 + row;
+      if (idx >= total) { rows.push('<span></span>'); continue; }
+      const d = new Date(start); d.setDate(start.getDate() + idx);
+      const r = Math.sin(idx * 12.9898 + 78.233) * 43758.5453;
+      const rnd = r - Math.floor(r);
+      let lvl = 0;
+      if (rnd > 0.35) lvl = 1;
+      if (rnd > 0.60) lvl = 2;
+      if (rnd > 0.80) lvl = 3;
+      if (rnd > 0.93) lvl = 4;
+      // recent 23 days → guaranteed streak (from Mar 28)
+      const daysFromToday = total - 1 - idx;
+      if (daysFromToday <= 22) lvl = Math.max(lvl, 2 + (daysFromToday % 3 === 0 ? 2 : 1));
+      const today = daysFromToday === 0;
+      const titles = ['今天的安静是被允许的','把周末还给自己','信任是可撤回的允许','四月以来第三周','边界不是规则','月影','三次烧成','Appreciate 比 Acknowledge 长','关于 kaguya 的第一个问题','神楽零 §III 的回声','点灯仪式','洗盏'];
+      const title = titles[Math.floor(rnd * titles.length)];
+      const dstr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+      rows.push(`<div class="hm-cell${lvl?' l'+lvl:''}${today?' today':''}" title="${dstr}"><span class="tip">${dstr}<span class="t">${lvl?title:'—'}</span></span></div>`);
+    }
+  }
+  grid.innerHTML = rows.join('');
+  grid.style.gridTemplateRows = 'repeat(7, auto)';
+  grid.style.gridAutoFlow = 'row';
+
+  // streak bars (last 30 days)
+  const bars = document.getElementById('streak-bars');
+  let bh = '';
+  for (let i = 0; i < 30; i++) {
+    const daysFromToday = 29 - i;
+    const written = daysFromToday <= 22;
+    if (!written) {
+      bh += `<span class="off" style="height:${15 + (i*7)%15}%"></span>`;
+    } else {
+      const h = 45 + ((i * 29) % 55);
+      bh += `<span class="on" style="height:${h}%"></span>`;
+    }
+  }
+  bars.innerHTML = bh;
+})();
+</script>
+</body>
+</html>
