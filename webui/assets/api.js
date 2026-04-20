@@ -82,8 +82,8 @@ window.KaguyaAPI = (function () {
     return apiFetch('/drawers' + buildQuery({ wing, room, limit, offset }));
   }
 
-  async function search(query, { topK } = {}) {
-    return apiFetch('/search' + buildQuery({ q: query, top_k: topK }));
+  async function search(query, { topK, wing } = {}) {
+    return apiFetch('/search' + buildQuery({ q: query, limit: topK, wing }));
   }
 
   // ----- knowledge graph -----
@@ -96,12 +96,12 @@ window.KaguyaAPI = (function () {
     return apiFetch('/kg/entities' + buildQuery({ limit, offset }));
   }
 
-  async function getKgTriples({ subject, predicate, object, limit } = {}) {
-    return apiFetch('/kg/triples' + buildQuery({ subject, predicate, object, limit }));
+  async function getKgTriples({ entity, limit } = {}) {
+    return apiFetch('/kg/triples' + buildQuery({ entity, limit }));
   }
 
-  async function getKgTimeline({ limit } = {}) {
-    return apiFetch('/kg/timeline' + buildQuery({ limit }));
+  async function getKgTimeline({ entity } = {}) {
+    return apiFetch('/kg/timeline' + buildQuery({ entity }));
   }
 
   // ----- graph / tunnels -----
