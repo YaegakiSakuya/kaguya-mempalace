@@ -343,6 +343,10 @@
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Earliest date displayed (matches heatmap header "today-364 → today")
+    const earliest = new Date(today);
+    earliest.setDate(today.getDate() - 364);
+
     // Align to Sunday of the week 52 weeks before this week's Sunday (365 days ≈ 53 weeks)
     const startSun = new Date(today);
     startSun.setDate(today.getDate() - today.getDay() - 52 * 7);
@@ -350,7 +354,7 @@
     const weeks = 53;
     const WEEKDAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
 
-    // Month labels — first column each month appears in
+    // Month labels — first column each month appears in (within the visible 365-day window)
     const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const monthCols = {};
     const seenMonths = new Set();
@@ -358,7 +362,7 @@
       for (let row = 0; row < 7; row++) {
         const d = new Date(startSun);
         d.setDate(startSun.getDate() + col * 7 + row);
-        if (d > today) continue;
+        if (d < earliest || d > today) continue;
         const key = d.getFullYear() + '-' + d.getMonth();
         if (!seenMonths.has(key) && d.getDate() <= 7) {
           seenMonths.add(key);
@@ -374,13 +378,15 @@
     if (monthsRow) monthsRow.innerHTML = monthHtml;
 
     // Cells — row outer, col inner; grid-auto-flow: row fills left-to-right top-to-bottom
+    // Cells outside the [earliest, today] window render as empty placeholders so the grid
+    // aligns to Sunday columns without leaking dates beyond the advertised range.
     const html = [];
     for (let row = 0; row < 7; row++) {
       html.push(`<div class="hm-weekday">${WEEKDAY_LABELS[row] || ''}</div>`);
       for (let col = 0; col < weeks; col++) {
         const d = new Date(startSun);
         d.setDate(startSun.getDate() + col * 7 + row);
-        if (d > today) {
+        if (d < earliest || d > today) {
           html.push('<span></span>');
           continue;
         }
