@@ -350,5 +350,492 @@
 
 <script src="assets/data.js"></script>
 <script src="assets/shell.js"></script>
+<script src="assets/api.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const $ = (sel) => document.querySelector(sel);
+  const esc = (s) => window.KaguyaAPI.escapeHtml(s);
+
+  // ---------- helpers ----------
+
+  // API 的 wing key (e.g. "wing_sex_and_body") → data.js 的 id (e.g. "sex_body")
+  function apiWingIdToDataId(apiKey) {
+    if (!apiKey) return '';
+    if (apiKey === 'chats') return 'chats';
+    const stripped = String(apiKey).replace(/^wing_/, '');
+    if (stripped === 'sex_and_body') return 'sex_body';
+    if (stripped === 'serious_reality') return 'reality';
+    return stripped;
+  }
+
+  // 简短 wing 名(用于 drawer path 前缀)
+  function wingShortName(apiKey) {
+    return apiWingIdToDataId(apiKey);
+  }
+
+  // 从 window.KAGUYA.wings 找元数据,若找不到返回 { name: dataId, jp: '', code: '' }
+  function lookupWingMeta(dataId) {
+    const wings = (window.KAGUYA && window.KAGUYA.wings) || [];
+    const hit = wings.find((w) => w.id === dataId);
+    if (hit) return { name: hit.name, jp: hit.jp, code: hit.code };
+    return { name: dataId, jp: '', code: '' };
+  }
+
+  function showError(container, err) {
+    container.innerHTML =
+      '<div style="color:var(--camellia-text);font-size:12px;padding:20px;">' +
+      '加载失败: ' + esc(err && err.message ? err.message : String(err)) +
+      '</div>';
+  }
+
+  function showLoading(container, text) {
+    container.innerHTML =
+      '<div style="color:var(--text-3);font-size:12px;padding:20px;">' +
+      esc(text || 'Loading…') +
+      '</div>';
+  }
+
+  // ---------- Section 1: Stats ----------
+
+  async function renderStats() {
+    const container = $('section.stats');
+    if (!container) return;
+    showLoading(container, 'Loading stats…');
+    try {
+      const [ov, wingsData, tax] = await Promise.all([
+        window.KaguyaAPI.getOverview(),
+        window.KaguyaAPI.getWings(),
+        window.KaguyaAPI.getTaxonomy(),
+      ]);
+
+      const wingsMap = (wingsData && wingsData.wings) || {};
+      const taxonomy = (tax && tax.taxonomy) || {};
+
+      const activeWings = Math.max(0, (ov.wings || 0) - 1);
+      const chatsCount = Number(wingsMap.chats || 0);
+
+      // find hottest room across all non-chats wings
+      let hot = { wingKey: '', room: '', count: 0 };
+      Object.keys(taxonomy).forEach((wingKey) => {
+        if (wingKey === 'chats') return;
+        const rooms = taxonomy[wingKey];
+        if (!rooms || typeof rooms !== 'object') return;
+        Object.keys(rooms).forEach((roomName) => {
+          const c = Number(rooms[roomName] || 0);
+          if (c > hot.count) {
+            hot = { wingKey, room: roomName, count: c };
+          }
+        });
+      });
+      const hotDataId = hot.wingKey ? apiWingIdToDataId(hot.wingKey) : '';
+      const hotMeta = hotDataId ? lookupWingMeta(hotDataId) : { name: '' };
+      const hotFoot = hot.count > 0
+        ? '最密 <span style="color:var(--text)">' + esc(hotMeta.name || hotDataId) + ' · ' + hot.count + '</span>'
+        : '—';
+
+      const fmt = window.KaguyaAPI.formatCount;
+
+      container.innerHTML = `
+        <div class="stat">
+          <div class="stat-label"><span>Wings</span><span class="kanji">翼</span></div>
+          <div class="stat-value"><span class="crawl-num">${fmt(ov.wings || 0)}</span><span class="unit">+1 sys</span></div>
+          <div class="stat-foot">${activeWings} 活跃 &nbsp;·&nbsp; 1 归档</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label"><span>Rooms</span><span class="kanji">房</span></div>
+          <div class="stat-value crawl-num">${fmt(ov.rooms || 0)}</div>
+          <div class="stat-foot">${hotFoot}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label"><span>Drawers</span><span class="kanji">屉</span></div>
+          <div class="stat-value crawl-num">${fmt(ov.drawers || 0)}</div>
+          <div class="stat-foot">${fmt(chatsCount)} chats</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label"><span>Triples</span><span class="kanji">三元</span></div>
+          <div class="stat-value crawl-num">${fmt(ov.kg_triples || 0)}</div>
+          <div class="stat-foot">${fmt(ov.kg_entities || 0)} entities</div>
+        </div>
+      `;
+    } catch (err) {
+      console.error('renderStats failed:', err);
+      showError(container, err);
+    }
+  }
+
+  // ---------- Section 2: Palace Map — Wing Grid + Sparse + Archive ----------
+
+  async function renderWingGrid() {
+    const mapGrid = $('.map-grid');
+    const sparseGrid = $('.sparse-grid');
+    const sparseLabel = $('.sparse-label');
+    const archiveRow = $('.archive-row');
+    if (!mapGrid || !sparseGrid || !archiveRow) return;
+
+    showLoading(mapGrid, 'Loading wings…');
+    sparseGrid.innerHTML = '';
+    archiveRow.innerHTML = '';
+
+    try {
+      const [wingsData, tax] = await Promise.all([
+        window.KaguyaAPI.getWings(),
+        window.KaguyaAPI.getTaxonomy(),
+      ]);
+
+      const wingsMap = (wingsData && wingsData.wings) || {};
+      const taxonomy = (tax && tax.taxonomy) || {};
+
+      const entries = Object.keys(wingsMap).map((apiKey) => {
+        const drawerCount = Number(wingsMap[apiKey] || 0);
+        const dataId = apiWingIdToDataId(apiKey);
+        const meta = lookupWingMeta(dataId);
+        const roomsObj = taxonomy[apiKey] || {};
+        const rooms = Object.keys(roomsObj);
+        return {
+          apiKey, dataId, drawerCount,
+          name: meta.name || dataId,
+          jp: meta.jp || '',
+          code: meta.code || '',
+          rooms,
+          roomCount: rooms.length,
+        };
+      });
+
+      const main = entries
+        .filter((e) => e.apiKey !== 'chats' && e.drawerCount >= 2)
+        .sort((a, b) => b.drawerCount - a.drawerCount);
+      const sparse = entries
+        .filter((e) => e.apiKey !== 'chats' && e.drawerCount === 1);
+      const archive = entries.find((e) => e.apiKey === 'chats');
+
+      const maxMainCount = main.reduce((m, e) => Math.max(m, e.drawerCount), 0) || 1;
+
+      // main grid
+      mapGrid.innerHTML = main.map((e) => {
+        const hot = e.drawerCount >= 10;
+        const heatPct = Math.min(96, Math.round((e.drawerCount / maxMainCount) * 96));
+        const shownRooms = e.rooms.slice(0, 4);
+        const roomsHtml = shownRooms
+          .map((r) => '<span class="rm">' + esc(r) + '</span>')
+          .join('');
+        const moreHtml = e.rooms.length > 4 ? '<span class="rm">…</span>' : '';
+        const jpCode = [e.jp, e.code].filter(Boolean).map(esc).join(' · ');
+        return `
+          <a class="wing${hot ? ' hot' : ''}" href="wings.html#${esc(e.dataId)}">
+            <div class="wing-name">${esc(e.name)}</div>
+            <div class="wing-jp">${jpCode}</div>
+            <div class="wing-rooms">${roomsHtml}${moreHtml}</div>
+            <div class="wing-stats">
+              <span><span class="n">${e.roomCount}</span><span class="k">rm</span></span>
+              <span><span class="n">${e.drawerCount}</span><span class="k">dr</span></span>
+            </div>
+            <div class="wing-heat"><span style="width:${heatPct}%"></span></div>
+          </a>
+        `;
+      }).join('') || '<div style="color:var(--text-3);font-size:12px;padding:20px;">暂无 wing</div>';
+
+      // sparse
+      if (sparseLabel) {
+        sparseLabel.textContent = 'Sparse Wings · ' + sparse.length;
+      }
+      sparseGrid.innerHTML = sparse.map((e) => {
+        const roomHint = e.rooms.length === 1 ? ' · ' + esc(e.rooms[0]) : '';
+        const metaText = roomHint
+          ? '<span class="n">1</span>' + roomHint
+          : '<span class="n">1</span> drawer';
+        return `
+          <a class="wing-sparse" href="wings.html#${esc(e.dataId)}">
+            <div class="name">${esc(e.name)}</div>
+            <div class="meta">${metaText}</div>
+          </a>
+        `;
+      }).join('');
+
+      // archive
+      if (archive) {
+        archiveRow.innerHTML = `
+          <a class="wing-archive" href="wings.html#chats">
+            <div class="archive-mark">SYS · ARCHIVE</div>
+            <div>
+              <div class="name">chats</div>
+              <div class="desc">历史会话归档</div>
+            </div>
+            <div class="count">${archive.drawerCount} drawers</div>
+          </a>
+        `;
+      }
+    } catch (err) {
+      console.error('renderWingGrid failed:', err);
+      showError(mapGrid, err);
+      sparseGrid.innerHTML = '';
+      archiveRow.innerHTML = '';
+    }
+  }
+
+  // ---------- Section 4: Recent Activity Timeline ----------
+
+  const TOOL_EVENT_MAP = {
+    'mempalace_add_drawer':    { kind: 'write',    verb: '写入 drawer' },
+    'mempalace_update_drawer': { kind: 'write',    verb: '更新 drawer' },
+    'mempalace_delete_drawer': { kind: 'write',    verb: '删除 drawer' },
+    'mempalace_diary_write':   { kind: 'is-diary', verb: '写入 diary' },
+    'mempalace_kg_add':        { kind: 'triple',   verb: '新增 triple' },
+    'mempalace_kg_invalidate': { kind: 'triple',   verb: '作废 triple' },
+    'mempalace_create_tunnel': { kind: 'tunnel',   verb: '新建 tunnel' },
+    'mempalace_delete_tunnel': { kind: 'tunnel',   verb: '删除 tunnel' },
+  };
+
+  function parseTs(ts) {
+    if (!ts) return null;
+    const d = new Date(String(ts).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return null;
+    return d;
+  }
+
+  function ymdLocal(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + dd;
+  }
+
+  function weekdayCn(d) {
+    return ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+  }
+
+  function hhmm(d) {
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  function dayHeaderLabel(d, todayYmd, yesterdayYmd) {
+    const y = ymdLocal(d);
+    if (y === todayYmd) return { label: 'Today', sub: '' };
+    if (y === yesterdayYmd) return { label: 'Yesterday', sub: '' };
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return { label: mm + '.' + dd + ' · ' + weekdayCn(d), sub: '' };
+  }
+
+  function buildTimelineBody(toolName, event, argsSummary) {
+    const args = argsSummary || {};
+    const verb = esc(event.verb);
+    if (toolName === 'mempalace_add_drawer' || toolName === 'mempalace_update_drawer' || toolName === 'mempalace_delete_drawer') {
+      const wing = esc(args.wing || '');
+      const room = esc(args.room || '');
+      if (wing || room) {
+        return `<span class="path">${wing}<span class="slash">/</span>${room}<span class="slash">/</span></span>${verb}`;
+      }
+      return verb;
+    }
+    if (toolName === 'mempalace_diary_write') {
+      const agent = esc(args.agent_name || 'kaguya');
+      return `${verb}(agent=${agent})`;
+    }
+    if (toolName === 'mempalace_kg_add' || toolName === 'mempalace_kg_invalidate') {
+      const s = args.subject, p = args.predicate, o = args.object;
+      if (s && p && o) {
+        return `${verb}<span class="triple-quote">⟨ ${esc(s)} — ${esc(p)} → ${esc(o)} ⟩</span>`;
+      }
+      return verb;
+    }
+    if (toolName === 'mempalace_create_tunnel' || toolName === 'mempalace_delete_tunnel') {
+      const from = esc(args.from || '');
+      const to = esc(args.to || '');
+      if (from || to) {
+        return `${verb}<em>${from} ↔ ${to}</em>`;
+      }
+      return verb;
+    }
+    return verb;
+  }
+
+  async function renderTimeline() {
+    const container = $('.timeline');
+    if (!container) return;
+    showLoading(container, 'Loading activity…');
+    try {
+      const calls = await window.KaguyaAPI.getToolCalls();
+      if (!Array.isArray(calls) || calls.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:20px;">暂无活动记录</div>';
+        return;
+      }
+
+      // newest first; API returns tail so reverse
+      const items = calls.slice().reverse();
+
+      const now = new Date();
+      const todayYmd = ymdLocal(now);
+      const yesterdayDate = new Date(now.getTime() - 86400000);
+      const yesterdayYmd = ymdLocal(yesterdayDate);
+
+      // group by local ymd, preserving first-seen order (newest first)
+      const groups = new Map();
+      items.forEach((it) => {
+        const d = parseTs(it.ts || it.timestamp);
+        if (!d) return;
+        const key = ymdLocal(d);
+        if (!groups.has(key)) groups.set(key, { date: d, rows: [] });
+        groups.get(key).rows.push({ it, d });
+      });
+
+      let html = '';
+      for (const [key, group] of groups) {
+        const hdr = dayHeaderLabel(group.date, todayYmd, yesterdayYmd);
+        const isToday = key === todayYmd;
+        const mmdd = String(group.date.getMonth() + 1).padStart(2, '0') + '.' + String(group.date.getDate()).padStart(2, '0');
+        html += `<div class="tl-day${isToday ? ' today' : ''}"><span>${esc(hdr.label)}</span><span class="weekday">${mmdd} · ${weekdayCn(group.date)}</span></div>`;
+
+        group.rows.forEach(({ it, d }) => {
+          const toolName = it.tool_name || '';
+          const event = TOOL_EVENT_MAP[toolName] || { kind: 'link', verb: '调用 ' + toolName };
+          const args = it.arguments_summary || it.arguments || {};
+          const body = buildTimelineBody(toolName, event, args);
+          const elapsed = it.elapsed_ms != null ? Number(it.elapsed_ms) : null;
+          let meta = '';
+          if (it.success === false) {
+            meta = '<span style="color:var(--camellia-text)">failed</span>';
+          } else if (elapsed != null && isFinite(elapsed)) {
+            meta = elapsed + 'ms';
+          }
+          html += `<div class="tl-row${isToday ? ' today' : ''}"><div class="tl-time">${hhmm(d)}</div><div class="tl-kind ${esc(event.kind)}"></div><div class="tl-body">${body}</div><div class="tl-meta">${meta}</div></div>`;
+        });
+      }
+      container.innerHTML = html || '<div style="color:var(--text-3);font-size:12px;padding:20px;">暂无活动记录</div>';
+    } catch (err) {
+      console.error('renderTimeline failed:', err);
+      showError(container, err);
+    }
+  }
+
+  // ---------- Section 5: Recent Drawers ----------
+
+  async function renderRecentDrawers() {
+    const container = $('.drawer-stack');
+    if (!container) return;
+    showLoading(container, 'Loading drawers…');
+    try {
+      const drawers = await window.KaguyaAPI.getDrawers({ limit: 50 });
+      if (!Array.isArray(drawers) || drawers.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:20px;">暂无 drawer</div>';
+        return;
+      }
+      const sorted = drawers.slice().sort((a, b) => {
+        const ta = new Date((a.metadata && a.metadata.filed_at) || 0).getTime();
+        const tb = new Date((b.metadata && b.metadata.filed_at) || 0).getTime();
+        return (isFinite(tb) ? tb : 0) - (isFinite(ta) ? ta : 0);
+      }).slice(0, 3);
+
+      container.innerHTML = sorted.map((d) => {
+        const meta = d.metadata || {};
+        const wingApi = meta.wing || '';
+        const room = meta.room || '';
+        const wingShort = wingShortName(wingApi);
+        const id = String(d.id || '');
+        let suffix = '';
+        const idx = id.lastIndexOf('_');
+        if (idx >= 0 && idx < id.length - 1) {
+          suffix = id.slice(idx + 1);
+        } else {
+          suffix = id.slice(0, 12);
+        }
+        const preview = d.content_preview || '';
+        const full = d.content_full || preview;
+        const title = window.KaguyaAPI.truncate(preview, 30);
+        const excerpt = preview;
+        const relTime = window.KaguyaAPI.formatRelativeTime(meta.filed_at);
+        const wordCount = full.length;
+        return `
+          <a class="drawer" href="#">
+            <div class="drawer-head">
+              <div class="drawer-path">
+                <span class="wtag">${esc(wingShort)}</span>
+                <span class="slash">/</span>${esc(room)}
+                <span class="slash">/</span>${esc(suffix)}
+              </div>
+              <div class="drawer-time">${esc(relTime)}</div>
+            </div>
+            <h3 class="drawer-title">${esc(title)}</h3>
+            <p class="drawer-excerpt">${esc(excerpt)}</p>
+            <div class="drawer-foot">
+              <span>${wordCount} 字</span>
+            </div>
+          </a>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error('renderRecentDrawers failed:', err);
+      showError(container, err);
+    }
+  }
+
+  // ---------- Section 6: Today's Diary ----------
+
+  async function renderTodayDiary() {
+    const container = $('.diary-card');
+    if (!container) return;
+    showLoading(container, 'Loading diary…');
+    try {
+      const diary = await window.KaguyaAPI.getDiary();
+      const entries = (diary && diary.entries) || [];
+      if (!entries.length) {
+        container.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:20px;">暂无 diary</div>';
+        return;
+      }
+      const entry = entries[0];
+      const dateStr = entry.date || '';
+      const ts = entry.timestamp || '';
+      const topic = entry.topic || '';
+      const content = entry.content || '';
+
+      const parts = String(dateStr).split('-');
+      const mm = parts[1] || '--';
+      const dd = parts[2] || '--';
+      const monthSlashDay = mm + ' / ' + dd;
+
+      const weekdays = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+      let weekday = '';
+      let timeStr = '';
+      const tsDate = parseTs(ts) || (dateStr ? parseTs(dateStr + 'T00:00:00') : null);
+      if (tsDate) {
+        weekday = weekdays[tsDate.getDay()];
+        if (ts) timeStr = hhmm(tsDate);
+      }
+
+      const topicTag = topic
+        ? `<span class="state">${esc(String(topic).toUpperCase())}</span>`
+        : '';
+      const subLine = [weekday, timeStr].filter(Boolean).join(' · ');
+
+      container.innerHTML = `
+        <div class="diary-date">
+          <span class="big">${esc(monthSlashDay)}</span>
+          <span>${esc(subLine)}</span>
+          ${topicTag}
+        </div>
+        <div class="diary-block">
+          <div class="diary-label">§ ENTRY${topic ? ' · ' + esc(topic) : ''}</div>
+          <p class="diary-text" style="white-space: pre-wrap;">${esc(content)}</p>
+        </div>
+      `;
+    } catch (err) {
+      console.error('renderTodayDiary failed:', err);
+      showError(container, err);
+    }
+  }
+
+  // ---------- bootstrap ----------
+
+  document.addEventListener('DOMContentLoaded', () => {
+    renderStats();
+    renderWingGrid();
+    renderTimeline();
+    renderRecentDrawers();
+    renderTodayDiary();
+    // tunnels-mini: intentionally left hardcoded (PR5)
+  });
+})();
+</script>
 </body>
 </html>
