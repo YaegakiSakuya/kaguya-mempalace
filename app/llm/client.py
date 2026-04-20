@@ -61,7 +61,7 @@ class ToolLoopResult:
         "diary_write_calls": 0,
     })
 
-OPS_DIR = Path("/home/ubuntu/apps/kaguya-gateway/ops")
+OPS_DIR = Path("/home/ubuntu/apps/kaguya-mempalace/ops")
 CORE_IDENTITY_FILE = OPS_DIR / "prompts" / "core_identity.md"
 WRITING_CONSTITUTION_FILE = OPS_DIR / "prompts" / "writing_constitution.md"
 SYSTEM_PROMPT_FILE = OPS_DIR / "prompts" / "system.md"

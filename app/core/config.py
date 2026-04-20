@@ -47,7 +47,7 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    base_dir = Path(os.getenv("BASE_DIR", "/home/ubuntu/apps/kaguya-gateway")).resolve()
+    base_dir = Path(os.getenv("BASE_DIR", "/home/ubuntu/apps/kaguya-mempalace")).resolve()
 
     settings = Settings(
         system_name=os.getenv("SYSTEM_NAME", "Kaguya Telegram Gateway"),

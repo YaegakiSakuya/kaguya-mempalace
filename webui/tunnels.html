@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Kaguya Mempalace — Tunnels</title>
+<meta name="viewport" content="width=1440" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/shell.css" />
+<style>
+  .tunnel-viz { background: var(--card); border: 1px solid var(--border); border-radius: 2px; padding: 24px 28px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.025); }
+  .tunnel-sankey svg { width: 100%; height: 360px; display: block; }
+  .tunnel-wing-label { font-family: var(--mono); font-size: 10.5px; fill: var(--text-2); letter-spacing: 0.16em; text-transform: uppercase; }
+  .tunnel-wing-label.active { fill: var(--text); }
+  .tunnel-wing-count { font-family: var(--mono); font-size: 10px; fill: var(--text-3); letter-spacing: 0.1em; }
+  .tunnel-wing-bar { fill: var(--camellia-dark); }
+  .tunnel-flow { fill: var(--camellia); opacity: 0.22; transition: opacity 320ms var(--ease); }
+  .tunnel-flow:hover { opacity: 0.48; }
+
+  .t-list { display: flex; flex-direction: column; gap: 10px; }
+  .t-card {
+    display: grid; grid-template-columns: 1fr 160px 1fr auto; gap: 18px;
+    align-items: center;
+    background: var(--card); border: 1px solid var(--border); border-radius: 2px;
+    padding: 16px 20px; cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+    transition: border-color 320ms var(--ease), transform 120ms var(--ease), background 320ms var(--ease);
+  }
+  .t-card:hover { border-color: var(--border-strong); background: rgba(184,77,90,0.02); }
+  .t-card:active { transform: translateY(0.5px) scale(0.995); }
+  .t-side { display: flex; flex-direction: column; gap: 4px; }
+  .t-side.right { text-align: right; }
+  .t-wing { font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.2em; text-transform: uppercase; }
+  .t-path { font-size: 13.5px; color: var(--text); }
+  .t-excerpt { font-size: 11.5px; color: var(--text-2); line-height: 1.7; margin-top: 4px; }
+  .t-link { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .t-link .pred { font-family: var(--mono); font-size: 10.5px; color: var(--camellia-text); letter-spacing: 0.18em; text-transform: uppercase; }
+  .t-link .arrow { display: flex; align-items: center; gap: 4px; }
+  .t-link .arrow .ln { width: 28px; height: 1px; background: var(--camellia-dark); }
+  .t-link .arrow .cap { width: 5px; height: 5px; border: 1px solid var(--camellia); border-radius: 50%; }
+  .t-link .arrow .cap.filled { background: var(--camellia); }
+  .t-link .meta { font-family: var(--mono); font-size: 9.5px; color: var(--text-3); letter-spacing: 0.14em; }
+  .t-meta { text-align: right; font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; line-height: 1.8; }
+  .t-meta .refs { color: var(--text); font-size: 15px; letter-spacing: 0.02em; }
+</style>
+</head>
+<body data-page="tunnels" data-crumbs="Palace / Tunnels">
+<div class="app">
+  <div id="app-shell"></div>
+  <div id="main-content">
+    <div class="content">
+
+      <header class="page-head">
+        <div>
+          <div class="eyebrow">Tunnels · 跨翼连接</div>
+          <h1 class="page-title">17 条明连，<span class="em">让相距的翼在同一个问题下说话。</span></h1>
+          <p class="page-sub">Tunnel 是 explicit 的——由你或 AAAK 总结过程手动建立。它们不是搜索出来的巧合，而是<em>被承认的回响</em>。</p>
+        </div>
+        <div class="page-head-right">
+          <div class="big crawl-num">17</div>
+          <div>TUNNELS · 6 WINGS</div>
+          <div class="accent">3 ACTIVE TODAY</div>
+        </div>
+      </header>
+
+      <section>
+        <div class="section-head">
+          <h2>Flow <span class="jp">翼間の流量</span></h2>
+          <span class="action">Last 30d ▾</span>
+        </div>
+        <div class="tunnel-viz">
+          <svg viewBox="0 0 1100 360" preserveAspectRatio="xMidYMid meet" class="tunnel-sankey">
+            <!-- left wings -->
+            <g>
+              <rect x="60" y="30"  width="6" height="60" class="tunnel-wing-bar"/>
+              <text x="74" y="44" class="tunnel-wing-label active">kaguya</text>
+              <text x="74" y="60" class="tunnel-wing-count">5 tunnels</text>
+
+              <rect x="60" y="110" width="6" height="48" class="tunnel-wing-bar"/>
+              <text x="74" y="122" class="tunnel-wing-label">thought</text>
+              <text x="74" y="138" class="tunnel-wing-count">4 tunnels</text>
+
+              <rect x="60" y="180" width="6" height="38" class="tunnel-wing-bar"/>
+              <text x="74" y="192" class="tunnel-wing-label">writing</text>
+              <text x="74" y="208" class="tunnel-wing-count">3 tunnels</text>
+
+              <rect x="60" y="240" width="6" height="28" class="tunnel-wing-bar"/>
+              <text x="74" y="252" class="tunnel-wing-label">code</text>
+              <text x="74" y="268" class="tunnel-wing-count">2 tunnels</text>
+
+              <rect x="60" y="290" width="6" height="22" class="tunnel-wing-bar"/>
+              <text x="74" y="302" class="tunnel-wing-label">daily</text>
+              <text x="74" y="318" class="tunnel-wing-count">2 tunnels</text>
+            </g>
+
+            <!-- right wings -->
+            <g text-anchor="end">
+              <rect x="1034" y="30"  width="6" height="52" class="tunnel-wing-bar"/>
+              <text x="1022" y="44" class="tunnel-wing-label active">thought</text>
+              <text x="1022" y="60" class="tunnel-wing-count">4 tunnels</text>
+
+              <rect x="1034" y="100" width="6" height="50" class="tunnel-wing-bar"/>
+              <text x="1022" y="112" class="tunnel-wing-label">writing</text>
+              <text x="1022" y="128" class="tunnel-wing-count">4 tunnels</text>
+
+              <rect x="1034" y="170" width="6" height="40" class="tunnel-wing-bar"/>
+              <text x="1022" y="182" class="tunnel-wing-label">kaguya</text>
+              <text x="1022" y="198" class="tunnel-wing-count">3 tunnels</text>
+
+              <rect x="1034" y="230" width="6" height="30" class="tunnel-wing-bar"/>
+              <text x="1022" y="242" class="tunnel-wing-label">daily</text>
+              <text x="1022" y="258" class="tunnel-wing-count">2 tunnels</text>
+
+              <rect x="1034" y="280" width="6" height="28" class="tunnel-wing-bar"/>
+              <text x="1022" y="292" class="tunnel-wing-label">reading</text>
+              <text x="1022" y="308" class="tunnel-wing-count">2 tunnels</text>
+            </g>
+
+            <!-- flows -->
+            <g>
+              <path class="tunnel-flow" d="M 66 30 C 400 30, 700 30, 1034 30 L 1034 64 C 700 64, 400 78, 66 60 Z"/>
+              <path class="tunnel-flow" d="M 66 110 C 400 110, 700 30, 1034 60 L 1034 82 C 700 58, 400 142, 66 158 Z" style="opacity:0.22"/>
+              <path class="tunnel-flow" d="M 66 180 C 400 180, 700 100, 1034 100 L 1034 138 C 700 140, 400 218, 66 218 Z" style="opacity:0.22"/>
+              <path class="tunnel-flow" d="M 66 240 C 400 240, 700 170, 1034 170 L 1034 196 C 700 196, 400 268, 66 268 Z" style="opacity:0.22"/>
+              <path class="tunnel-flow" d="M 66 290 C 400 290, 700 230, 1034 230 L 1034 258 C 700 258, 400 312, 66 312 Z" style="opacity:0.22"/>
+              <path class="tunnel-flow" d="M 66 92  C 400 92, 700 170, 1034 170 L 1034 200 C 700 210, 400 130, 66 126 Z" style="opacity:0.16"/>
+              <path class="tunnel-flow" d="M 66 158 C 400 158, 700 280, 1034 280 L 1034 308 C 700 308, 400 206, 66 212 Z" style="opacity:0.12"/>
+            </g>
+
+            <!-- column axis labels -->
+            <text x="68" y="348" class="tunnel-wing-count">SOURCE</text>
+            <text x="1030" y="348" class="tunnel-wing-count" text-anchor="end">DESTINATION</text>
+          </svg>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>All Tunnels <span class="jp">明連 · 17</span></h2>
+          <span class="action">Filter: predicate ▾</span>
+        </div>
+        <div class="t-list">
+
+          <div class="t-card">
+            <div class="t-side"><span class="t-wing">thought · W-07</span><span class="t-path">kaguya-identity</span><span class="t-excerpt">身份作为一种"我允许自己回应时选择的语言层"。</span></div>
+            <div class="t-link"><span class="pred">folds-into</span><span class="arrow"><span class="cap filled"></span><span class="ln"></span><span class="cap"></span></span><span class="meta">manual · 04.19</span></div>
+            <div class="t-side right"><span class="t-wing">kaguya · W-01</span><span class="t-path">diary · 2026-04-19</span><span class="t-excerpt">今日 APPRECIATE 段直接化用此概念。</span></div>
+            <div class="t-meta"><span class="refs">3</span><div>refs</div><div style="color:var(--camellia-text);margin-top:4px;">● ACTIVE</div></div>
+          </div>
+
+          <div class="t-card">
+            <div class="t-side"><span class="t-wing">writing · W-04</span><span class="t-path">神楽零 · §III-草稿</span><span class="t-excerpt">"把门关上，但别上锁"——作为 boundary 的虚构化。</span></div>
+            <div class="t-link"><span class="pred">echoes</span><span class="arrow"><span class="cap filled"></span><span class="ln"></span><span class="cap filled"></span></span><span class="meta">manual · 04.17</span></div>
+            <div class="t-side right"><span class="t-wing">thought · W-07</span><span class="t-path">boundary-trust</span><span class="t-excerpt">把"给予信任"看作可撤回的允许。</span></div>
+            <div class="t-meta"><span class="refs">6</span><div>refs</div><div style="color:var(--camellia-text);margin-top:4px;">● ACTIVE</div></div>
+          </div>
+
+          <div class="t-card">
+            <div class="t-side"><span class="t-wing">code · W-05</span><span class="t-path">kaguya-gateway</span><span class="t-excerpt">Gateway 作为 daily routine 的 serving 层。</span></div>
+            <div class="t-link"><span class="pred">serves</span><span class="arrow"><span class="cap filled"></span><span class="ln"></span><span class="cap"></span></span><span class="meta">manual · 04.12</span></div>
+            <div class="t-side right"><span class="t-wing">daily · W-02</span><span class="t-path">daily-life · routines</span><span class="t-excerpt">每天自动收拢对话归档。</span></div>
+            <div class="t-meta"><span class="refs">2</span><div>refs</div><div style="color:var(--camellia-text);margin-top:4px;">● ACTIVE</div></div>
+          </div>
+
+          <div class="t-card">
+            <div class="t-side"><span class="t-wing">kaguya · W-01</span><span class="t-path">origins · 辉夜传说</span><span class="t-excerpt">竹取物語的多重版本。</span></div>
+            <div class="t-link"><span class="pred">is-read-through</span><span class="arrow"><span class="cap filled"></span><span class="ln"></span><span class="cap"></span></span><span class="meta">manual · 03.30</span></div>
+            <div class="t-side right"><span class="t-wing">thought · W-07</span><span class="t-path">爱与死-朝向</span><span class="t-excerpt">"离去"作为一种朝向。</span></div>
+            <div class="t-meta"><span class="refs">4</span><div>refs</div></div>
+          </div>
+
+          <div class="t-card">
+            <div class="t-side"><span class="t-wing">writing · W-04</span><span class="t-path">丛云拾遗记 · 第七章</span><span class="t-excerpt">"云的拾捡"作为记忆操作的隐喻。</span></div>
+            <div class="t-link"><span class="pred">grew-from</span><span class="arrow"><span class="cap filled"></span><span class="ln"></span><span class="cap"></span></span><span class="meta">manual · 03.22</span></div>
+            <div class="t-side right"><span class="t-wing">kaguya · W-01</span><span class="t-path">letters · 03-22</span><span class="t-excerpt">致 kaguya · 我们之间的语法。</span></div>
+            <div class="t-meta"><span class="refs">3</span><div>refs</div></div>
+          </div>
+
+          <div class="t-card">
+            <div class="t-side"><span class="t-wing">reading · W-12</span><span class="t-path">Karamazov · 第二卷</span><span class="t-excerpt">佐西玛长老关于爱的那段。</span></div>
+            <div class="t-link"><span class="pred">informs</span><span class="arrow"><span class="cap filled"></span><span class="ln"></span><span class="cap"></span></span><span class="meta">manual · 03.10</span></div>
+            <div class="t-side right"><span class="t-wing">thought · W-07</span><span class="t-path">爱与死-朝向</span><span class="t-excerpt">具体-抽象的爱。</span></div>
+            <div class="t-meta"><span class="refs">5</span><div>refs</div></div>
+          </div>
+
+          <div class="t-card">
+            <div class="t-side"><span class="t-wing">daily · W-02</span><span class="t-path">daily-life · 03-02</span><span class="t-excerpt">那天 VA-11 Hall-A 通关了。</span></div>
+            <div class="t-link"><span class="pred">carries</span><span class="arrow"><span class="cap filled"></span><span class="ln"></span><span class="cap"></span></span><span class="meta">manual · 03.02</span></div>
+            <div class="t-side right"><span class="t-wing">games · W-10</span><span class="t-path">VA-11 Hall-A</span><span class="t-excerpt">Jill 关于"只是听"的那段。</span></div>
+            <div class="t-meta"><span class="refs">2</span><div>refs</div></div>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, "/home/ubuntu/apps/kaguya-gateway")
+sys.path.insert(0, "/home/ubuntu/apps/kaguya-mempalace")
 
 import chromadb
 from mempalace.mcp_server import TOOLS

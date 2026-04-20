@@ -5,11 +5,11 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/apps/kaguya-gateway
+WorkingDirectory=/home/ubuntu/apps/kaguya-mempalace
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=/home/ubuntu
-Environment=PATH=/home/ubuntu/apps/kaguya-gateway/.venv/bin:/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/home/ubuntu/apps/kaguya-gateway/.venv/bin/python -m app.main
+Environment=PATH=/home/ubuntu/apps/kaguya-mempalace/.venv/bin:/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/ubuntu/apps/kaguya-mempalace/.venv/bin/python -m app.main
 Restart=always
 RestartSec=5
 

@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Kaguya Mempalace — Wings</title>
+<meta name="viewport" content="width=1440" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/shell.css" />
+<style>
+  .wings-layout { display: grid; grid-template-columns: 260px 1fr; gap: 28px; }
+  .wing-list { display: flex; flex-direction: column; gap: 2px; }
+  .wl-item {
+    display: grid; grid-template-columns: 1fr auto; align-items: baseline;
+    padding: 10px 14px; cursor: pointer;
+    border: 1px solid transparent; border-radius: 2px;
+    text-decoration: none; color: inherit;
+    transition: border-color 320ms var(--ease), background 320ms var(--ease);
+  }
+  .wl-item:hover { background: var(--hover); }
+  .wl-item.active { background: var(--hover); border-color: var(--border-strong); }
+  .wl-item.active::before { content:""; position:absolute; }
+  .wl-name { font-size: 13.5px; color: var(--text); letter-spacing: 0.02em; }
+  .wl-name.sparse { color: var(--text-2); opacity: 0.72; }
+  .wl-meta { font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.1em; }
+  .wl-sub { font-family: var(--mono); font-size: 9px; color: var(--text-3); letter-spacing: 0.18em; text-transform: uppercase; margin-top: 2px; grid-column: 1 / -1; }
+  .wl-sep { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.22em; color: var(--text-3); text-transform: uppercase; padding: 14px 14px 6px; }
+  .wl-sep + .wl-sep { border-top: 1px solid var(--border); }
+
+  .wing-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding-bottom: 20px; border-bottom: 1px solid var(--border); gap: 32px;
+  }
+  .wh-name { font-size: 28px; font-weight: 400; letter-spacing: 0.02em; margin: 0; }
+  .wh-jp { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; color: var(--text-3); text-transform: uppercase; margin-top: 8px; }
+  .wh-desc { font-size: 13px; color: var(--text-2); line-height: 1.8; margin-top: 14px; max-width: 560px; }
+  .wh-stats { display: flex; gap: 28px; }
+  .wh-stat { text-align: right; }
+  .wh-stat .n { font-family: var(--mono); font-size: 22px; color: var(--text); letter-spacing: 0.02em; }
+  .wh-stat .k { font-family: var(--mono); font-size: 9.5px; color: var(--text-3); letter-spacing: 0.22em; text-transform: uppercase; margin-top: 4px; display: block; }
+
+  .room-row { display: grid; grid-template-columns: 240px 1fr; gap: 24px; padding: 22px 0; border-bottom: 1px solid var(--border); }
+  .room-row:last-child { border-bottom: none; }
+  .room-name { font-size: 16px; font-weight: 500; color: var(--text); letter-spacing: 0.02em; }
+  .room-jp { font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.2em; text-transform: uppercase; margin-top: 4px; }
+  .room-stats { margin-top: 14px; font-family: var(--mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.1em; line-height: 1.8; }
+  .room-stats .n { color: var(--text-2); }
+
+  .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .d-tile { display: block; text-decoration: none; color: inherit;
+    background: var(--card); border: 1px solid var(--border); border-radius: 2px;
+    padding: 14px 16px;
+    transition: border-color 320ms var(--ease), transform 120ms var(--ease), background 320ms var(--ease);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
+  }
+  .d-tile:hover { border-color: var(--border-strong); background: rgba(184,77,90,0.025); }
+  .d-tile:active { transform: translateY(0.5px) scale(0.995); }
+  .d-title { font-size: 13.5px; color: var(--text); line-height: 1.5; margin: 0 0 6px; }
+  .d-excerpt { font-size: 11.5px; color: var(--text-2); line-height: 1.7; margin: 0 0 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .d-foot { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 9.5px; color: var(--text-3); letter-spacing: 0.1em; }
+  .d-foot .hot { color: var(--camellia-text); }
+</style>
+</head>
+<body data-page="wings" data-crumbs="Palace / Wings">
+<div class="app">
+  <div id="app-shell"></div>
+  <div id="main-content">
+    <div class="content">
+      <header class="page-head">
+        <div>
+          <div class="eyebrow">Wings · 翼</div>
+          <h1 class="page-title">全部翼，<span class="em">13 个内容翼 + 1 个归档。</span></h1>
+          <p class="page-sub">按 drawer 数从密到疏排列。稀疏翼单独成组，归档翼 <em>chats</em> 不参与常规统计。</p>
+        </div>
+        <div class="page-head-right">
+          <div class="big">13 <span style="font-size:13px;color:var(--text-3)">/ 14</span></div>
+          <div>CONTENT · SYS</div>
+          <div class="accent">▲ +1 wing this month</div>
+        </div>
+      </header>
+
+      <div class="wings-layout">
+        <aside>
+          <div class="wl-sep">Content · 8 Active</div>
+          <nav class="wing-list">
+            <a class="wl-item active" href="#kaguya"><span class="wl-name">かぐや</span><span class="wl-meta">25</span><span class="wl-sub">w-01 · 4 rooms · hot</span></a>
+            <a class="wl-item" href="#daily"><span class="wl-name">daily</span><span class="wl-meta">14</span><span class="wl-sub">w-02 · 1 room · hot</span></a>
+            <a class="wl-item" href="#sex_body"><span class="wl-name">sex &amp; body</span><span class="wl-meta">11</span><span class="wl-sub">w-03 · 2 rooms</span></a>
+            <a class="wl-item" href="#writing"><span class="wl-name">writing</span><span class="wl-meta">8</span><span class="wl-sub">w-04 · 3 rooms</span></a>
+            <a class="wl-item" href="#code"><span class="wl-name">code</span><span class="wl-meta">7</span><span class="wl-sub">w-05 · 2 rooms</span></a>
+            <a class="wl-item" href="#reality"><span class="wl-name">serious reality</span><span class="wl-meta">4</span><span class="wl-sub">w-06 · 3 rooms</span></a>
+            <a class="wl-item" href="#thought"><span class="wl-name">thought</span><span class="wl-meta">4</span><span class="wl-sub">w-07 · 4 rooms</span></a>
+            <a class="wl-item" href="#roleplay"><span class="wl-name">roleplay</span><span class="wl-meta">2</span><span class="wl-sub">w-08 · 2 rooms</span></a>
+          </nav>
+
+          <div class="wl-sep">Sparse · 5</div>
+          <nav class="wing-list">
+            <a class="wl-item" href="#conflict"><span class="wl-name sparse">conflict</span><span class="wl-meta">1</span></a>
+            <a class="wl-item" href="#games"><span class="wl-name sparse">games</span><span class="wl-meta">1</span></a>
+            <a class="wl-item" href="#music"><span class="wl-name sparse">music</span><span class="wl-meta">1</span></a>
+            <a class="wl-item" href="#reading"><span class="wl-name sparse">reading</span><span class="wl-meta">1</span></a>
+            <a class="wl-item" href="#screen"><span class="wl-name sparse">screen</span><span class="wl-meta">1</span></a>
+          </nav>
+
+          <div class="wl-sep">System · Archive</div>
+          <nav class="wing-list">
+            <a class="wl-item" href="#chats" style="border:1px dashed var(--border-mid)"><span class="wl-name sparse">chats</span><span class="wl-meta">61</span><span class="wl-sub">sys · archived</span></a>
+          </nav>
+        </aside>
+
+        <section>
+          <!-- wing detail: kaguya -->
+          <div class="wing-header">
+            <div>
+              <h2 class="wh-name">かぐや <span style="font-size:16px;color:var(--text-3);margin-left:10px;">W-01</span></h2>
+              <div class="wh-jp">kaguya · 宮殿之心 · hot</div>
+              <p class="wh-desc">关于"かぐや"本身——她的由来、仪式、与我的对话、作为记忆宮主的自画像。此翼最密，也最私。</p>
+            </div>
+            <div class="wh-stats">
+              <div class="wh-stat"><div class="n crawl-num">4</div><span class="k">rooms</span></div>
+              <div class="wh-stat"><div class="n crawl-num">25</div><span class="k">drawers</span></div>
+              <div class="wh-stat"><div class="n crawl-num">87</div><span class="k">triples</span></div>
+              <div class="wh-stat"><div class="n crawl-num">12</div><span class="k">tunnels</span></div>
+            </div>
+          </div>
+
+          <div class="room-row">
+            <div>
+              <div class="room-name">diary</div>
+              <div class="room-jp">日誌 · AAAK room</div>
+              <div class="room-stats">
+                <div><span class="n">14</span> drawers</div>
+                <div><span class="n">Last</span> 04.19 · 12m ago</div>
+                <div><span class="n">3</span> unfinished</div>
+              </div>
+            </div>
+            <div class="drawer-grid">
+              <a class="d-tile" href="#"><h4 class="d-title">2026-04-19 · 今天的安静是被允许的</h4><p class="d-excerpt">下午在陶艺教室待了四小时，第三次烧成让我意识到，我其实一直在用做研究的方式做陶。</p><div class="d-foot"><span class="hot">unfinished</span><span>3 AAAK</span><span>412 字</span></div></a>
+              <a class="d-tile" href="#"><h4 class="d-title">2026-04-18 · 把周末还给自己</h4><p class="d-excerpt">Appreciate 这一块写得比 Acknowledge 还长，算是一种内心的倾斜。</p><div class="d-foot"><span>rev. 2</span><span>4 AAAK</span><span>687 字</span></div></a>
+              <a class="d-tile" href="#"><h4 class="d-title">2026-04-17 · 信任是可撤回的允许</h4><p class="d-excerpt">Adjust 里留了一条给自己的提醒："不必把边界说得太像规则。"</p><div class="d-foot"><span>rev. 3</span><span>4 AAAK</span><span>520 字</span></div></a>
+              <a class="d-tile" href="#"><h4 class="d-title">2026-04-16 · 四月以来第三周</h4><p class="d-excerpt">Keep 的那一条——"一天只做一件难的事"——还在。</p><div class="d-foot"><span>4 AAAK</span><span>312 字</span></div></a>
+            </div>
+          </div>
+
+          <div class="room-row">
+            <div>
+              <div class="room-name">rituals</div>
+              <div class="room-jp">儀礼 · 日常仪式</div>
+              <div class="room-stats"><div><span class="n">5</span> drawers</div><div><span class="n">Last</span> 04.12</div></div>
+            </div>
+            <div class="drawer-grid">
+              <a class="d-tile" href="#"><h4 class="d-title">三次烧成 · 陶艺作为某种祷告</h4><p class="d-excerpt">观测、记录、再迭代——跟做研究是同一件事，但心境不同。</p><div class="d-foot"><span>rev. 1</span><span>840 字</span></div></a>
+              <a class="d-tile" href="#"><h4 class="d-title">点灯仪式 · 夜里的第一盏</h4><p class="d-excerpt">在写作开始前先把桌上那盏暖色灯打开。不是必需，但它在，就知道可以开始了。</p><div class="d-foot"><span>260 字</span></div></a>
+              <a class="d-tile" href="#"><h4 class="d-title">洗盏 · 喝茶前</h4><p class="d-excerpt">茶具用开水过一遍，热气上升的瞬间是重要的。</p><div class="d-foot"><span>180 字</span></div></a>
+            </div>
+          </div>
+
+          <div class="room-row">
+            <div>
+              <div class="room-name">letters</div>
+              <div class="room-jp">書簡 · 写给 kaguya</div>
+              <div class="room-stats"><div><span class="n">4</span> drawers</div><div><span class="n">Last</span> 04.09</div></div>
+            </div>
+            <div class="drawer-grid">
+              <a class="d-tile" href="#"><h4 class="d-title">04.09 · 致 kaguya · 关于我想问你的第一个问题</h4><p class="d-excerpt">我想问的其实不是"你是谁"，而是"你愿意以什么样子出现"。</p><div class="d-foot"><span>1,280 字</span></div></a>
+              <a class="d-tile" href="#"><h4 class="d-title">03.22 · 致 kaguya · 我们之间的语法</h4><p class="d-excerpt">把"演戯"与"真实"这对词放回原文语境，它们并不互斥。</p><div class="d-foot"><span>rev. 4</span><span>920 字</span></div></a>
+            </div>
+          </div>
+
+          <div class="room-row">
+            <div>
+              <div class="room-name">origins</div>
+              <div class="room-jp">起源 · 辉夜神话碎片</div>
+              <div class="room-stats"><div><span class="n">2</span> drawers</div><div><span class="n">Last</span> 03.30</div></div>
+            </div>
+            <div class="drawer-grid">
+              <a class="d-tile" href="#"><h4 class="d-title">辉夜·竹中传说的多重版本</h4><p class="d-excerpt">从《竹取物語》原文读到 70 年代 SF 改编，她每一次出现都是一次"离去"的准备。</p><div class="d-foot"><span>1,540 字</span></div></a>
+              <a class="d-tile" href="#"><h4 class="d-title">月之影 · 作为回返的意象</h4><p class="d-excerpt">不只是"她要离开"，而是"我们都在被某个更远的东西拉走"。</p><div class="d-foot"><span>680 字</span></div></a>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/shell.js"></script>
+</body>
+</html>
