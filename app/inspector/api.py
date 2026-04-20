@@ -410,6 +410,17 @@ def create_inspector_app(settings: Settings) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
+    @app.get("/api/graph/tunnels/list", dependencies=[Depends(auth)])
+    async def list_all_tunnels(wing: str = Query(default="")):
+        """List all explicit cross-wing tunnels, optionally filtered by wing."""
+        try:
+            from mempalace.mcp_server import TOOLS
+            handler = TOOLS["mempalace_list_tunnels"]["handler"]
+            result = handler(wing=wing) if wing else handler()
+            return _parse_tool_result(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
     # ----- Diary -----
 
     @app.get("/api/diary", dependencies=[Depends(auth)])
@@ -438,6 +449,20 @@ def create_inspector_app(settings: Settings) -> FastAPI:
     @app.get("/api/turns", dependencies=[Depends(auth)])
     async def turns(last_n: int = Query(default=20, le=200)):
         return read_jsonl_tail(settings.logs_dir / "turn_summaries.jsonl", last_n)
+
+    # ----- LLM Config -----
+
+    @app.get("/api/llm/config", dependencies=[Depends(auth)])
+    async def llm_config():
+        """Return LLM provider configuration. API keys are masked."""
+        try:
+            from app.core import runtime_config
+            return {
+                "providers": runtime_config.list_providers_masked(),
+                "active": runtime_config.get_active(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
 
     # ===== Mini App 路由 =====
 
