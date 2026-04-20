@@ -198,7 +198,6 @@ html { scroll-behavior: smooth; }
 .content {
   padding: 40px 48px 72px;
   display: flex; flex-direction: column; gap: 40px;
-  max-width: 1200px;
   animation: page-in 180ms var(--ease) both;
 }
 @keyframes page-in {
