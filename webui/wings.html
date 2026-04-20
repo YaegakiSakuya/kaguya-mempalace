@@ -118,6 +118,7 @@
   let wingsData = null;
   let taxonomyData = null;
   let currentWingKey = null;
+  let loadToken = 0;
   const drawerCache = new Map();
 
   // ---------- payload normalization (mirrors index.html) ----------
@@ -374,6 +375,7 @@
   }
 
   async function loadWingDetail(apiKey) {
+    const token = ++loadToken;
     currentWingKey = apiKey;
     const section = document.querySelector('.wings-layout > section');
     if (!section) return;
@@ -383,11 +385,14 @@
       let drawers = drawerCache.get(apiKey);
       if (!drawers) {
         drawers = await window.KaguyaAPI.getDrawers({ wing: apiKey, limit: 200 });
+        if (token !== loadToken) return;
         drawerCache.set(apiKey, drawers);
       }
+      if (token !== loadToken) return;
       section.innerHTML = renderWingDetailHtml(apiKey, drawers || []);
       updateActiveWingInSidebar(apiKey);
     } catch (err) {
+      if (token !== loadToken) return;
       console.error('loadWingDetail failed:', err);
       section.innerHTML = `<div style="padding:40px;color:var(--camellia-text);">加载失败: ${esc(err && err.message ? err.message : String(err))}</div>`;
     }
@@ -407,6 +412,15 @@
 
   // ---------- init ----------
   document.addEventListener('DOMContentLoaded', async () => {
+    // prevent drawer tile anchors from clearing the wing hash on click
+    const sectionEl = document.querySelector('.wings-layout > section');
+    if (sectionEl) {
+      sectionEl.addEventListener('click', (e) => {
+        const tile = e.target.closest && e.target.closest('.d-tile');
+        if (tile) e.preventDefault();
+      });
+    }
+
     try {
       [wingsData, taxonomyData] = await Promise.all([
         window.KaguyaAPI.getWings(),
