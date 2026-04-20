@@ -355,7 +355,9 @@ def _append_recent_turns(messages: list[dict], recent_turns: list[Turn]) -> None
         if past_user:
             messages.append({"role": "user", "content": f"[朔夜] {past_user}"})
         if past_assistant:
-            messages.append({"role": "assistant", "content": f"[辉夜] {past_assistant}"})
+            # assistant 侧不再加 [辉夜] 前缀：role=assistant 本身已是身份锚，
+            # 对称前缀只会把 [辉夜] 变成 few-shot 模板，逼模型每次署名开头。
+            messages.append({"role": "assistant", "content": past_assistant})
 
 
 def build_reply_messages(
