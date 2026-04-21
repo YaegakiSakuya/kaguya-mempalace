@@ -128,18 +128,63 @@ window.KaguyaAPI = (function () {
     return apiFetch('/llm/config');
   }
 
-  // ----- write operations (PUT / DELETE) -----
+  // ----- write operations (PUT / POST / PATCH / DELETE) -----
+
+  async function _throwIfNotOk(resp) {
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      let msg = 'HTTP ' + resp.status;
+      try {
+        const j = JSON.parse(text);
+        msg += ': ' + (j.detail || j.error || text);
+      } catch (_) {
+        if (text) msg += ': ' + text;
+      }
+      throw new Error(msg);
+    }
+    return resp;
+  }
 
   async function putJson(path, body) {
-    return apiFetch(path, {
+    const resp = await fetch(BASE + path, {
       method: 'PUT',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {}),
     });
+    await _throwIfNotOk(resp);
+    return resp.json().catch(() => ({}));
+  }
+
+  async function postJson(path, body) {
+    const resp = await fetch(BASE + path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    await _throwIfNotOk(resp);
+    return resp.json().catch(() => ({}));
+  }
+
+  async function patchJson(path, body) {
+    const resp = await fetch(BASE + path, {
+      method: 'PATCH',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    await _throwIfNotOk(resp);
+    return resp.json().catch(() => ({}));
   }
 
   async function deleteJson(path) {
-    return apiFetch(path, { method: 'DELETE' });
+    const resp = await fetch(BASE + path, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
+    await _throwIfNotOk(resp);
+    return resp.json().catch(() => ({}));
   }
 
   async function updateDrawer(drawerId, patch) {
@@ -149,6 +194,32 @@ window.KaguyaAPI = (function () {
 
   async function deleteDrawer(drawerId) {
     return deleteJson('/drawers/' + encodeURIComponent(drawerId));
+  }
+
+  // ----- llm config write operations -----
+
+  async function addLlmProvider({ name, base_url, api_key }) {
+    return postJson('/llm/providers', { name, base_url, api_key });
+  }
+
+  async function updateLlmProvider(providerId, patch) {
+    return patchJson('/llm/providers/' + encodeURIComponent(providerId), patch);
+  }
+
+  async function deleteLlmProvider(providerId) {
+    return deleteJson('/llm/providers/' + encodeURIComponent(providerId));
+  }
+
+  async function setLlmActive({ provider_id, model }) {
+    return postJson('/llm/active', { provider_id, model });
+  }
+
+  async function refreshLlmModels(providerId) {
+    return postJson('/llm/providers/' + encodeURIComponent(providerId) + '/models', {});
+  }
+
+  async function pingLlmProvider(providerId, model) {
+    return postJson('/llm/providers/' + encodeURIComponent(providerId) + '/ping', { model });
   }
 
   // ----- diary / usage / tools / turns -----
@@ -232,9 +303,17 @@ window.KaguyaAPI = (function () {
     getAllTunnels,
     getLlmConfig,
     putJson,
+    postJson,
+    patchJson,
     deleteJson,
     updateDrawer,
     deleteDrawer,
+    addLlmProvider,
+    updateLlmProvider,
+    deleteLlmProvider,
+    setLlmActive,
+    refreshLlmModels,
+    pingLlmProvider,
     getDiary,
     getUsage,
     getToolCalls,

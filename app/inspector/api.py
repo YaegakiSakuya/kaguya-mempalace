@@ -27,6 +27,27 @@ class DrawerUpdateIn(BaseModel):
     wing: Optional[str] = None
     room: Optional[str] = None
 
+
+class LLMProviderAddIn(BaseModel):
+    name: str
+    base_url: str
+    api_key: str
+
+
+class LLMProviderPatchIn(BaseModel):
+    name: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+
+
+class LLMSetActiveIn(BaseModel):
+    provider_id: str
+    model: str
+
+
+class LLMPingIn(BaseModel):
+    model: Optional[str] = None
+
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -496,6 +517,136 @@ def create_inspector_app(settings: Settings) -> FastAPI:
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
+
+    @app.post("/api/llm/providers", dependencies=[Depends(auth)])
+    async def llm_add_provider(body: LLMProviderAddIn):
+        from app.core import runtime_config
+        from app.miniapp.config_routes import _validate_base_url
+
+        name = body.name.strip()
+        base_url = body.base_url.strip()
+        api_key = body.api_key.strip()
+        if not name or not base_url or not api_key:
+            raise HTTPException(400, "name, base_url, api_key are all required")
+        url_err = _validate_base_url(base_url)
+        if url_err:
+            raise HTTPException(400, url_err)
+
+        provider = runtime_config.add_provider(name=name, base_url=base_url, api_key=api_key)
+        return {"provider": provider}
+
+    @app.patch("/api/llm/providers/{provider_id}", dependencies=[Depends(auth)])
+    async def llm_update_provider(provider_id: str, body: LLMProviderPatchIn):
+        from app.core import runtime_config
+        from app.miniapp.config_routes import _validate_base_url
+
+        kwargs: dict[str, Any] = {}
+        if body.name is not None:
+            name = body.name.strip()
+            if not name:
+                raise HTTPException(400, "name must not be empty")
+            kwargs["name"] = name
+        if body.base_url is not None:
+            base_url = body.base_url.strip()
+            if not base_url:
+                raise HTTPException(400, "base_url must not be empty")
+            url_err = _validate_base_url(base_url)
+            if url_err:
+                raise HTTPException(400, url_err)
+            kwargs["base_url"] = base_url
+        if body.api_key is not None and body.api_key.strip():
+            kwargs["api_key"] = body.api_key.strip()
+
+        try:
+            provider = runtime_config.update_provider(provider_id, **kwargs)
+        except KeyError:
+            raise HTTPException(404, f"provider not found: {provider_id}")
+        return {"provider": provider}
+
+    @app.delete("/api/llm/providers/{provider_id}", dependencies=[Depends(auth)])
+    async def llm_delete_provider(provider_id: str):
+        from app.core import runtime_config
+        try:
+            runtime_config.delete_provider(provider_id)
+        except KeyError:
+            raise HTTPException(404, f"provider not found: {provider_id}")
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+        return {"success": True}
+
+    @app.post("/api/llm/active", dependencies=[Depends(auth)])
+    async def llm_set_active(body: LLMSetActiveIn):
+        from app.core import runtime_config
+
+        provider_id = body.provider_id.strip()
+        model = body.model.strip()
+        if not provider_id or not model:
+            raise HTTPException(400, "provider_id and model are required")
+        try:
+            return runtime_config.set_active(provider_id, model)
+        except KeyError:
+            raise HTTPException(404, f"provider not found: {provider_id}")
+
+    @app.post("/api/llm/providers/{provider_id}/models", dependencies=[Depends(auth)])
+    async def llm_refresh_models(provider_id: str):
+        from app.core import runtime_config
+        from app.miniapp.config_routes import _fetch_models
+        import requests
+
+        try:
+            base_url, api_key, _ = runtime_config._get_provider_credentials(provider_id)
+        except KeyError:
+            raise HTTPException(404, f"provider not found: {provider_id}")
+
+        try:
+            models = _fetch_models(base_url, api_key)
+        except requests.HTTPError as exc:
+            raise HTTPException(502, str(exc))
+        except requests.Timeout:
+            raise HTTPException(502, "upstream /models request timed out")
+        except requests.RequestException as exc:
+            raise HTTPException(502, f"network error: {exc}")
+        except ValueError as exc:
+            raise HTTPException(502, str(exc))
+
+        runtime_config.update_models_cache(provider_id, models)
+        refreshed = runtime_config.get_provider_masked(provider_id) or {}
+        return {
+            "models": models,
+            "refreshed_at": refreshed.get("models_refreshed_at"),
+        }
+
+    @app.post("/api/llm/providers/{provider_id}/ping", dependencies=[Depends(auth)])
+    async def llm_ping_provider(provider_id: str, body: LLMPingIn):
+        import time
+        from app.core import runtime_config
+
+        try:
+            base_url, api_key, last_model = runtime_config._get_provider_credentials(provider_id)
+        except KeyError:
+            raise HTTPException(404, f"provider not found: {provider_id}")
+
+        model = (body.model or last_model or "").strip()
+        if not model:
+            return {"ok": False, "error": "no model specified and provider has no last_model", "model": ""}
+
+        try:
+            from openai import OpenAI
+        except Exception as exc:
+            return {"ok": False, "error": f"openai SDK unavailable: {exc}", "model": model}
+
+        try:
+            client = OpenAI(api_key=api_key, base_url=base_url, timeout=10.0, max_retries=0)
+            t0 = time.monotonic()
+            client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+            )
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            return {"ok": True, "latency_ms": latency_ms, "model": model}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc), "model": model}
 
     # ===== Mini App 路由 =====
 
