@@ -130,7 +130,7 @@
       <header class="page-head">
         <div>
           <div class="eyebrow">Overview · 宮殿全景</div>
-          <h1 class="page-title">晚安，<span class="em">宫殿今日有 9 处改动。</span></h1>
+          <h1 class="page-title"><span id="greeting-text"></span><span class="em">宫殿今日有 9 处改动。</span></h1>
           <p class="page-sub">最后一次写入是 12 分钟前，在 <em>kaguya · diary · 2026-04-19</em>。知识图谱新增 3 条 triple，有 1 个实体等你解消歧。</p>
         </div>
         <div class="page-head-right">
@@ -354,6 +354,14 @@
 <script>
 (function () {
   'use strict';
+
+  // 招呼语按北京时间时辰化，第一时间写入，不依赖任何 API 调用。
+  try {
+    const el = document.getElementById('greeting-text');
+    if (el && window.KaguyaShell && typeof window.KaguyaShell.greeting === 'function') {
+      el.textContent = window.KaguyaShell.greeting();
+    }
+  } catch (e) { /* no-op */ }
 
   const $ = (sel) => document.querySelector(sel);
   const esc = (s) => window.KaguyaAPI.escapeHtml(s);

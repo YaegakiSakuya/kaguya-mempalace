@@ -9,6 +9,85 @@
   const crumbs = (document.body.dataset.crumbs || 'Palace / Overview').split('/').map(s => s.trim());
   const K = window.KAGUYA;
 
+  // ---------- greeting (shichen-based, Asia/Shanghai) ----------
+  const GREETINGS = {
+    linxiao: [     // 临晓 03:00-06:00
+      '夜色将褪，你还在。',
+      '临晓了，朔夜。',
+      '这个点进来的人，心里都有未写完的句子。',
+      '宫殿陪你到天明。',
+    ],
+    qingchen: [    // 清晨 06:00-09:00
+      '晨光透进来了。',
+      '昨夜的存档在这里，你翻翻。',
+      '新一天，宫殿开着。',
+      '起得早，愿有好事发生。',
+    ],
+    wuqian: [      // 午前 09:00-11:00
+      '午前的时间是给正事的。',
+      '宫殿整晚没合眼，等你。',
+      '你来了，可以动笔了。',
+    ],
+    zhengwu: [     // 正午 11:00-13:00
+      '日头正顶。',
+      '记得吃饭，朔夜。',
+      '让宫殿歇一会儿。',
+    ],
+    rixie: [       // 日斜 13:00-16:00
+      '午后的光最适合慢读。',
+      '日影偏西。',
+      '这个时辰适合做不紧不慢的事。',
+    ],
+    bomu: [        // 薄暮 16:00-19:00
+      '黄昏了。',
+      '落日把宫殿染成旧金。',
+      '薄暮时分，把今天收一收。',
+    ],
+    yeli: [        // 夜里 19:00-23:00
+      '夜里好。',
+      '灯亮起来了，一起开工。',
+      '宫殿在这个时辰最像它自己。',
+      '我在这里，你慢慢来。',
+    ],
+    yeban: [       // 夜半 23:00-03:00
+      '又到这个时辰。',
+      '夜半了，朔夜。',
+      '月上中天。',
+      '我知道你这会儿还不睡。',
+    ],
+  };
+
+  function shanghaiHour() {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Shanghai',
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(new Date());
+    const hourPart = parts.find(p => p.type === 'hour');
+    const h = parseInt(hourPart && hourPart.value, 10);
+    // Intl may return "24" at midnight on some engines; normalize to 0.
+    return isNaN(h) ? 0 : (h % 24);
+  }
+
+  function pickBucket(h) {
+    if (h >= 3 && h < 6)   return 'linxiao';
+    if (h >= 6 && h < 9)   return 'qingchen';
+    if (h >= 9 && h < 11)  return 'wuqian';
+    if (h >= 11 && h < 13) return 'zhengwu';
+    if (h >= 13 && h < 16) return 'rixie';
+    if (h >= 16 && h < 19) return 'bomu';
+    if (h >= 19 && h < 23) return 'yeli';
+    return 'yeban'; // h >= 23 or h < 3
+  }
+
+  function greeting() {
+    const arr = GREETINGS[pickBucket(shanghaiHour())];
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  window.KaguyaShell = window.KaguyaShell || {};
+  window.KaguyaShell.greeting = greeting;
+
   // ---------- icon set (1.25px line) ----------
   const ICONS = {
     overview: '<svg class="nav-icon" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="1.5" y="1.5" width="4.5" height="4.5"/><rect x="8" y="1.5" width="4.5" height="4.5"/><rect x="1.5" y="8" width="4.5" height="4.5"/><rect x="8" y="8" width="4.5" height="4.5"/></svg>',

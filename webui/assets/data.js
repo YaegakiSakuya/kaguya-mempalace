@@ -35,7 +35,7 @@ window.KAGUYA = (function () {
     ]},
   ];
 
-  const palaceMeta = { name: 'kaguya.main', since: '2024.07.12', sync: '14s ago' };
+  const palaceMeta = { name: 'kaguya.main', since: '2026.04.17', sync: '14s ago' };
 
   return { wings, nav, palaceMeta };
 })();

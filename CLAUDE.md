@@ -339,6 +339,12 @@ webui/
 - **修改 systemd unit** 文件需三步:`sudo cp systemd/*.service /etc/systemd/system/` → `sudo systemctl daemon-reload` → `sudo systemctl restart <unit>`
 - webui 重大 UI 改动走 PR,细节调整(改 wing display name、调招呼语文案等)直接 commit 到 main 也可以
 
+### Overview 页的动态锚点
+
+- **招呼语**: `webui/assets/shell.js` 的 `window.KaguyaShell.greeting()` 根据北京时间（Asia/Shanghai）划分 8 段时辰（临晓/清晨/午前/正午/日斜/薄暮/夜里/夜半），每段 3-4 条备选文案随机输出。文案表硬编码在 shell.js 内,由项目所有者（辉夜）定稿,气口需保持古典而有活人感,不要改写成助手腔。
+- **since 日期**: `palaceMeta.since = '2026.04.17'` 是情感锚点（项目所有者生日),不是宫殿技术初始化时间（那是 2026-04-09)。不要"订正"回技术日期。
+- **page-head 其他字段当前仍为占位**: "宫殿今日有 N 处改动" / "最后一次写入是 X 分钟前" / 右上角日期星期 / "▲ N writes today" 暂未接线真实数据,属独立待办,改动时请一并立项。
+
 ---
 
 ## Critical Gotchas
