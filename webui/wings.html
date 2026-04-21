@@ -68,6 +68,11 @@
     background: rgba(184,77,90,0.08);
     border-color: var(--camellia);
   }
+  .room-row.drop-target {
+    background: rgba(184,77,90,0.04);
+    box-shadow: inset 0 0 0 1px var(--camellia);
+    border-radius: 2px;
+  }
 </style>
 </head>
 <body data-page="wings" data-crumbs="Palace / Wings">
@@ -368,7 +373,11 @@
       const lastLine = lastShort
         ? `<div><span class="n">Last</span> ${esc(lastShort)}</div>`
         : '';
-      html += `<div class="room-row">`
+      // data-room holds the raw metadata room name; empty string means the
+      // "(unassigned)" bucket (can't be a cross-room drop target in this PR,
+      // since dropping there would write literal "(unassigned)" into metadata).
+      const roomAttr = r.name === '(unassigned)' ? '' : r.name;
+      html += `<div class="room-row" data-room="${esc(roomAttr)}">`
         + `<div>`
         + `<div class="room-name">${esc(r.name)}</div>`
         + `<div class="room-stats">`
@@ -672,16 +681,19 @@
     });
   }
 
-  // ---------- drag-and-drop: move drawer across wings ----------
+  // ---------- drag-and-drop: move drawer across wings / across rooms ----------
   //
-  // Flow: grab .d-tile → drag over .wl-item → drop triggers move modal.
-  // Silent no-op when drop target is the source wing or not a .wl-item
-  // (dragover only calls preventDefault when the target is a *different*
-  // wing, so the browser blocks drop on invalid targets naturally).
-  let draggingDrawer = null; // { id, sourceWingKey }
+  // Cross-wing: grab .d-tile → drag over .wl-item → drop triggers move modal.
+  // Cross-room (same wing): grab .d-tile → drag over .room-row → drop triggers
+  // move modal with the target room pre-filled to the drop zone's room name.
+  // Silent no-op when drop target is the source wing/room, the "(unassigned)"
+  // bucket, or outside any valid zone — dragover only calls preventDefault
+  // when the target is *different*, so the browser blocks invalid drops
+  // naturally.
+  let draggingDrawer = null; // { id, sourceWingKey, sourceRoom }
 
   function clearDropTargets() {
-    document.querySelectorAll('.wl-item.drop-target').forEach((el) => {
+    document.querySelectorAll('.wl-item.drop-target, .room-row.drop-target').forEach((el) => {
       el.classList.remove('drop-target');
     });
   }
@@ -693,7 +705,11 @@
     const drawer = findDrawerById(id);
     if (!drawer) return;
     const meta = drawer.metadata || {};
-    draggingDrawer = { id, sourceWingKey: meta.wing || currentWingKey };
+    draggingDrawer = {
+      id,
+      sourceWingKey: meta.wing || currentWingKey,
+      sourceRoom: meta.room || '',
+    };
     if (e.dataTransfer) {
       try { e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
       // Override the anchor's default href payload with our drawer id.
@@ -746,6 +762,52 @@
     openMoveModal(drawer, sourceKey, targetKey);
   }
 
+  // Room-level handlers (same-wing cross-room). Attached to the section
+  // element; events from inner .d-tile and .drawer-grid bubble up and we
+  // resolve the enclosing .room-row via closest().
+  function handleRoomDragOver(e) {
+    if (!draggingDrawer) return;
+    const row = e.target && e.target.closest && e.target.closest('.room-row');
+    if (!row) return;
+    const targetRoom = row.dataset.room;
+    // Empty targetRoom = "(unassigned)" bucket; skip as drop target.
+    if (!targetRoom || targetRoom === draggingDrawer.sourceRoom) return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+    }
+    // Only one room highlights at a time.
+    document.querySelectorAll('.room-row.drop-target').forEach((el) => {
+      if (el !== row) el.classList.remove('drop-target');
+    });
+    row.classList.add('drop-target');
+  }
+
+  function handleRoomDragLeave(e) {
+    const row = e.target && e.target.closest && e.target.closest('.room-row');
+    if (!row) return;
+    const related = e.relatedTarget;
+    if (related && row.contains(related)) return;
+    row.classList.remove('drop-target');
+  }
+
+  function handleRoomDrop(e) {
+    if (!draggingDrawer) return;
+    const row = e.target && e.target.closest && e.target.closest('.room-row');
+    if (!row) return;
+    const targetRoom = row.dataset.room;
+    row.classList.remove('drop-target');
+    if (!targetRoom || targetRoom === draggingDrawer.sourceRoom) return;
+    e.preventDefault();
+    const drawerId = draggingDrawer.id;
+    const sourceKey = draggingDrawer.sourceWingKey;
+    draggingDrawer = null;
+    const drawer = findDrawerById(drawerId);
+    if (!drawer) return;
+    // Same-wing move: targetWing === sourceWing, room is pre-filled from drop zone.
+    openMoveModal(drawer, sourceKey, sourceKey, targetRoom);
+  }
+
   async function refreshSidebarCounts() {
     try {
       const [w, t] = await Promise.all([
@@ -760,7 +822,10 @@
     }
   }
 
-  function openMoveModal(drawer, sourceWingKey, targetWingKey) {
+  // targetRoomHint: when provided (cross-room drop), pre-fills the room field
+  // with the drop zone's room. When undefined (cross-wing drop), pre-fills
+  // with the drawer's original room. User can always edit before confirming.
+  function openMoveModal(drawer, sourceWingKey, targetWingKey, targetRoomHint) {
     const meta = drawer.metadata || {};
     const preview = drawer.content_preview || '';
     const title = truncate(preview, 40) || '(untitled drawer)';
@@ -777,7 +842,8 @@
     const targetDisplay = (targetCfg && targetCfg.name) || targetDataId;
     const targetLabel = `${targetDisplay} · ${targetWingKey}`;
 
-    const state = { room: originalRoom, error: '', saving: false };
+    const preloadRoom = (targetRoomHint !== undefined) ? targetRoomHint : originalRoom;
+    const state = { room: preloadRoom, error: '', saving: false };
     let modalActive = true;
 
     function renderBody() {
@@ -875,6 +941,9 @@
       });
       sectionEl.addEventListener('dragstart', handleTileDragStart);
       sectionEl.addEventListener('dragend', handleTileDragEnd);
+      sectionEl.addEventListener('dragover', handleRoomDragOver);
+      sectionEl.addEventListener('dragleave', handleRoomDragLeave);
+      sectionEl.addEventListener('drop', handleRoomDrop);
     }
 
     const asideEl = document.querySelector('.wings-layout > aside');
