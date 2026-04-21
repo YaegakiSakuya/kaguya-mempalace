@@ -386,6 +386,15 @@ webui/
 - **Ping 永远返回 200**:失败情况 `{ok: false, error}`,便于前端统一处理,不和 4xx/5xx 混淆
 - **前端入口待接**:`webui/llm.html` 的 UI 改造在独立的下一个 PR 做
 
+### LLM config 前端操作(llm.html)
+
+- **左侧 aside 右上**:`+ 新增` 按钮打开 modal,填 name / base_url / api_key(password 带 show/hide toggle)三字段创建 provider
+- **中间 config 面板顶部 4 按钮**:`编辑信息`(只改 name + base_url) / `轮换 key`(单独 modal 只改 api_key) / `刷新模型列表` / `删除 provider`(active provider 时 disabled)
+- **Available Models 区域**:每个 model chip 点击展开 action tray,有 `Ping 测试` 和 `Set as Active` 两个按钮。ping 结果以 pill 形式显示在 tray 右侧
+- **set-active 护栏**:未 ping 过直接切需要两级确认(按钮变 danger 样式并加一层二级 modal);ping 通过后降为 primary 一级确认
+- **所有写后处理**:成功后关 modal → `reloadAndRender()` 重新拉取 config 并重新渲染整页,selectedProviderId 落到刚改的那个 provider 上
+- **错误处理**:所有 modal 内部有 `.kg-modal-error` inline banner,API 报错不关 modal,让用户看到 detail 再自行重试
+
 ### Runtime config 边界
 
 - **`app/core/runtime_config.py` 是 process-global 单例**:miniapp 和 inspector 共享同一份状态,任一 writer 落盘 → `{state_dir}/llm_config.json` → 所有 reader 立即生效
