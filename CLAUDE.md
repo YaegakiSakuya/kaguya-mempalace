@@ -264,11 +264,80 @@ kaguya-mempalace/
 
 ## webui/ 桌面端网页门面
 
-- `webui/` 是 mempalace 的桌面端静态网页门面，独立于 Telegram Mini App（`miniapp/`）
-- 入口 `webui/index.html`，7 个 html 页面平铺在根目录 + `webui/assets/` 下 3 个共享资源
-- 所有内部链接是相对路径，部署时挂在 nginx 子路径下即可
-- **当前未部署**，部署由 VPS 侧架构师处理
-- 源码由项目所有者手工维护，**不要自动化修改 `webui/` 目录下任何文件**
+`webui/` 是 mempalace 的桌面端静态网页门面,已部署上线,挂在 `https://api.onlykaguya.com/palace/`。独立于 Telegram Mini App(`miniapp/`)。
+
+### 布局
+
+7 个 html 页面 + 3 个共享资源:
+
+```
+webui/
+├── index.html        # Overview (宫殿全景 + stats 四宫格 + wing grid + timeline + recent drawers + today diary)
+├── wings.html        # 左侧 wing 列表 + 右侧按需加载 rooms/drawers
+├── graph.html        # 知识图谱: 左侧 entities + 右侧 radial SVG
+├── tunnels.html      # 跨翼连接: Sankey + All Tunnels 列表
+├── diary.html        # 日记: 365 days heatmap + Today 卡 + Past Week + Streak
+├── search.html       # 向量语义搜索(chroma cosine)
+├── llm.html          # LLM 配置(4 providers: 智谱/满穗GPT/OpenRouter/满穗Claude)
+└── assets/
+    ├── api.js        # window.KaguyaAPI: 17 个 API 端点的 fetch wrapper + 渲染工具函数
+    ├── data.js       # 静态展示 metadata (wing 的 name/jp/code 映射, nav, palaceMeta)
+    ├── shell.js      # 共享 UI 行为(nav mount / clock / Cmd+K 命令面板)
+    └── shell.css     # 共享 design tokens + 所有页面共用的 class 定义
+```
+
+### 前端架构约束
+
+- **不引入任何框架**:纯原生 ES + IIFE 包装 + `window.XXX` 全局
+- **鉴权在 nginx 层**:前端 `fetch('/api/xxx')` 直接用,浏览器自动带 Basic credential,nginx 边缘翻译成 Bearer 给 upstream
+- **CSS 类名是契约**:shell.css 里定义的 `.stat`、`.wing`、`.room-row`、`.d-tile`、`.tl-row`、`.drawer`、`.result`、`.kg-entity`、`.kg-node-circle`、`.tunnel-viz`、`.t-card`、`.prov`、`.cfg` 等,前端 JS 生成 DOM 时必须复用这些 class,不能改
+- **page-specific CSS** 在每个 html 的 `<head> <style>` 块里,**不要动**
+- **所有用户数据显示前必须 `KaguyaAPI.escapeHtml()`**,防 XSS
+- **数据接线模式**:每页 `<script src="assets/api.js">` + 一段 IIFE inline script,负责 DOM replace。状态独立 try/catch,单处 fail 不连带其他 section
+
+### 部署与权限
+
+| 路径 | 作用 | 权限 |
+|---|---|---|
+| `webui/` 仓库目录 | 源码 | git push 到 main 立即部署(nginx 直 serve 静态文件,无需重启) |
+| `https://api.onlykaguya.com/palace/` | 浏览器入口 | nginx Basic Auth `kaguya:Kaguya-Mempalace-2026` |
+| `https://api.onlykaguya.com/api/*` | JSON API | nginx Basic Auth(同上),nginx 翻译成 Bearer 给 upstream `127.0.0.1:8765` |
+| `/etc/nginx/.htpasswd_palace` | bcrypt 用户名密码 | 640 root:www-data |
+| `/etc/nginx/snippets/inspector_bearer.conf` | bearer 覆写 snippet | 640 root:www-data,从 `.env` 读 `INSPECTOR_TOKEN` |
+
+### Inspector API 端点速查表
+
+| 端点 | 参数 | 返回 |
+|---|---|---|
+| `GET /api/overview` | — | drawers/wings/rooms/kg_entities/kg_triples + recent_tool_calls[10] |
+| `GET /api/taxonomy` | — | `{taxonomy: {wing_x: {room: count}}}` |
+| `GET /api/wings` | — | `{wings: {wing_x: count, chats: 61}}` |
+| `GET /api/rooms` | wing=必填 | 该 wing 的 room 列表 |
+| `GET /api/drawers` | wing=/room=/limit=/offset= | drawers 数组,每条有 content_full/preview/metadata |
+| `GET /api/search` | q=必填,limit=,wing= | chroma cosine 结果,每条含 distance |
+| `GET /api/kg/stats` | — | entities/triples/relationship_types |
+| `GET /api/kg/entities` | limit=/offset= | entity 数组 |
+| `GET /api/kg/triples` | entity=必填 | 该 entity 出/入边 |
+| `GET /api/kg/timeline` | entity=必填 | 时间线 |
+| `GET /api/graph/stats` | — | 图统计 |
+| `GET /api/graph/nodes` | — | 全部节点 |
+| `GET /api/graph/tunnels` | wing_a=/wing_b= 都必填 | 按对查 |
+| `GET /api/graph/tunnels/list` | wing= 可选 | **列全部 tunnels** |
+| `GET /api/diary` | agent=/limit= | diary entries 数组,按 date 降序 |
+| `GET /api/usage` | — | LLM token 使用记录 |
+| `GET /api/tools/calls` | — | 最近 50 条 tool 调用 |
+| `GET /api/turns` | — | 最近对话 turn |
+| `GET /api/llm/config` | — | `{providers: [...], active: {provider_id/provider_name/base_url/model}}`,api_key 已脱敏 |
+
+所有端点走 `Depends(auth)` Bearer 验证,前端经 nginx Basic Auth 代理透明注入 Bearer token。
+
+### 改动 webui 的规范
+
+- **只改静态文件**:`webui/` 下任何 html / js / css 直接修改 → git push → 部署完成,nginx 不用 reload
+- **改 inspector API**(`app/inspector/api.py`)后需要:`sudo systemctl restart kaguya-gateway`
+- **改 nginx conf** 后需要:`sudo systemctl reload nginx`(不是 restart)。conf 文件仓库镜像在 `nginx/api.onlykaguya.com.conf`,改线上要同步回仓库
+- **修改 systemd unit** 文件需三步:`sudo cp systemd/*.service /etc/systemd/system/` → `sudo systemctl daemon-reload` → `sudo systemctl restart <unit>`
+- webui 重大 UI 改动走 PR,细节调整(改 wing display name、调招呼语文案等)直接 commit 到 main 也可以
 
 ---
 
@@ -285,6 +354,8 @@ kaguya-mempalace/
 - **Supabase `kaguya-media` 项目的 `images` / `voices` / `message_images` 三张表**：schema 与 gateway 代码耦合，不要手动 DROP / ALTER 字段。新增字段要通过 `Supabase:apply_migration` 走 migration 流程。
 - **`runtime/uploads/` 下的文件**：是唯一的媒体存档（图片和语音的字节都在这里）。**不要随意清理**，Supabase 里的 `file_path` 字段全部指向这里的相对路径，一删就再也找不回来。
 - **已激活的 MiniMax voice_id**：`kaguya_ja_v1` 已经付过 9.9 元音色解锁费，永久属于本账号。如果被从 MiniMax 删除（比如误调用 delete voice），需要重新克隆 + 再付一次解锁费。**不要去 MiniMax 后台的"声音管理"页面 touch 已激活的音色**。
+- **nginx `/etc/nginx/.htpasswd_palace` 和 `/etc/nginx/snippets/inspector_bearer.conf`**:webui Basic Auth + Bearer 覆写的两个凭据文件。**不进 git**。轮换密码时走 `sudo htpasswd -b /etc/nginx/.htpasswd_palace kaguya <new_pw>` + `sudo systemctl reload nginx`。不要手写 file 覆盖。
+- **`ops/` 和 `runtime/` 下的实际数据**:ops 是 AI 身份,runtime 是宫殿内容(drawers/KG/diary)。任何自动化清理操作之前必须 `git stash` 或明确备份。
 
 ### 谨慎修改的东西
 
@@ -293,6 +364,9 @@ kaguya-mempalace/
 - **`app/core/config.py`**：加新字段可以，不要改现有字段的含义。
 - **`app/media/pipeline.py`** 的 `ingest_image` dedup 逻辑：当前逻辑已专门处理"VL 失败留下的坏记录不毒化缓存"的情况（find 命中但 vl_description 为空 → 重跑 VL + update）。**不要退化回"命中就复用"的天真版本**。
 - **VL 模型选型（`VL_MODEL` env）**：实测 `Qwen3-VL-30B-A3B-Instruct` 响应 ~5s，`Qwen3-VL-235B-A22B-Instruct` 顶配 60s+ 超时。**不要默认回 235B**。换模型前先跑真实照片测试。
+- **webui 是生产环境**:直接 push 到 main 会立即生效。大改动走 PR,一个 PR 一件事(CSS 调整 / 后端端点 / 前端接线各自独立 PR,方便回滚)。
+- **webui 的数据真实性 vs 视觉占位**:某些字段 API 无对应数据(比如 drawer 的 "rev N"、wing 的 triples/tunnels stat),前端现在用 `—` 占位或直接省略。**不要为了美观而伪造数字**——朔夜看一眼就能识破。
+- **drawer 没有独立 title 字段**:前端各页展示的 "drawer 标题" 是用 `content_preview` 前 40 字截断伪造的。这是 mempalace 设计层面的事实,不是 bug。如果要让 drawer 有清晰身份,应该在 mempalace 包层面给 drawer 加 `topic` 字段(和 diary 一样),这是独立立项,不要在 webui 前端堆补丁掩盖。
 
 ### 运行时特性
 
