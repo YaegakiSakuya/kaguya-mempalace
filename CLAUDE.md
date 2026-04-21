@@ -369,6 +369,13 @@ webui/
 - **刷新策略**:save/delete 成功后关 modal,局部刷新当前 wing/room 的 drawer 列表,严禁 `location.reload()`
 - **错误处理**:后端返回 `{success: false, error: "..."}` 时,edit 态在 modal 内联展示错误,不关闭;其他 HTTP 错误 console.error + modal 内错误横幅
 
+### Drawer 拖拽跨 wing 移动(Wings 页)
+
+- 右侧 `.d-tile` 可拖到左侧 `.wl-item` 的某个 wing 行,释放后弹 modal 确认目标 wing + room(默认原 room 可改)
+- 落地机制:只调 `PUT /api/drawers/{id}` 传 `{wing, room}`,chroma embedding 不重建(mempalace handler 只在 content 变更时才 re-embed)
+- Drop 到非 wl-item 区域或源 wing = 静默失败不弹 modal
+- 取消 modal = drawer 保持原位
+
 ### Webui 写操作的鉴权边界
 
 - 当前 webui 所有写端点(`PUT /api/drawers/{id}` / `DELETE /api/drawers/{id}`)复用读端点的 Basic Auth + Bearer 翻译

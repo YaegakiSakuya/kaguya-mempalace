@@ -51,15 +51,23 @@
   .d-tile { display: block; text-decoration: none; color: inherit;
     background: var(--card); border: 1px solid var(--border); border-radius: 2px;
     padding: 14px 16px;
-    transition: border-color 320ms var(--ease), transform 120ms var(--ease), background 320ms var(--ease);
+    transition: border-color 320ms var(--ease), transform 120ms var(--ease), background 320ms var(--ease), opacity 160ms var(--ease);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.025);
   }
   .d-tile:hover { border-color: var(--border-strong); background: rgba(184,77,90,0.025); }
   .d-tile:active { transform: translateY(0.5px) scale(0.995); }
+  .d-tile[draggable="true"] { cursor: grab; }
+  .d-tile[draggable="true"]:active { cursor: grabbing; }
+  .d-tile.dragging { opacity: 0.4; }
   .d-title { font-size: 13.5px; color: var(--text); line-height: 1.5; margin: 0 0 6px; }
   .d-excerpt { font-size: 11.5px; color: var(--text-2); line-height: 1.7; margin: 0 0 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .d-foot { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 9.5px; color: var(--text-3); letter-spacing: 0.1em; }
   .d-foot .hot { color: var(--camellia-text); }
+
+  .wl-item.drop-target {
+    background: rgba(184,77,90,0.08);
+    border-color: var(--camellia);
+  }
 </style>
 </head>
 <body data-page="wings" data-crumbs="Palace / Wings">
@@ -350,7 +358,7 @@
         const full = d.content_full || preview;
         const title = truncate(preview, 40);
         const wordCount = String(full).length;
-        return `<a class="d-tile" href="#" data-drawer-id="${esc(d.id)}">`
+        return `<a class="d-tile" href="#" draggable="true" data-drawer-id="${esc(d.id)}">`
           + `<h4 class="d-title">${esc(title)}</h4>`
           + `<p class="d-excerpt">${esc(preview)}</p>`
           + `<div class="d-foot"><span>${wordCount} 字</span></div>`
@@ -664,6 +672,194 @@
     });
   }
 
+  // ---------- drag-and-drop: move drawer across wings ----------
+  //
+  // Flow: grab .d-tile → drag over .wl-item → drop triggers move modal.
+  // Silent no-op when drop target is the source wing or not a .wl-item
+  // (dragover only calls preventDefault when the target is a *different*
+  // wing, so the browser blocks drop on invalid targets naturally).
+  let draggingDrawer = null; // { id, sourceWingKey }
+
+  function clearDropTargets() {
+    document.querySelectorAll('.wl-item.drop-target').forEach((el) => {
+      el.classList.remove('drop-target');
+    });
+  }
+
+  function handleTileDragStart(e) {
+    const tile = e.target && e.target.closest && e.target.closest('.d-tile');
+    if (!tile) return;
+    const id = tile.dataset.drawerId;
+    const drawer = findDrawerById(id);
+    if (!drawer) return;
+    const meta = drawer.metadata || {};
+    draggingDrawer = { id, sourceWingKey: meta.wing || currentWingKey };
+    if (e.dataTransfer) {
+      try { e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+      // Override the anchor's default href payload with our drawer id.
+      try { e.dataTransfer.setData('text/plain', id); } catch (_) {}
+    }
+    tile.classList.add('dragging');
+  }
+
+  function handleTileDragEnd(e) {
+    const tile = e.target && e.target.closest && e.target.closest('.d-tile');
+    if (tile) tile.classList.remove('dragging');
+    clearDropTargets();
+    draggingDrawer = null;
+  }
+
+  function handleWlDragOver(e) {
+    if (!draggingDrawer) return;
+    const item = e.target && e.target.closest && e.target.closest('.wl-item');
+    if (!item) return;
+    const targetKey = item.dataset.wingKey;
+    if (!targetKey || targetKey === draggingDrawer.sourceWingKey) return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+    }
+    item.classList.add('drop-target');
+  }
+
+  function handleWlDragLeave(e) {
+    const item = e.target && e.target.closest && e.target.closest('.wl-item');
+    if (!item) return;
+    const related = e.relatedTarget;
+    if (related && item.contains(related)) return;
+    item.classList.remove('drop-target');
+  }
+
+  function handleWlDrop(e) {
+    if (!draggingDrawer) return;
+    const item = e.target && e.target.closest && e.target.closest('.wl-item');
+    if (!item) return;
+    const targetKey = item.dataset.wingKey;
+    item.classList.remove('drop-target');
+    if (!targetKey || targetKey === draggingDrawer.sourceWingKey) return;
+    e.preventDefault();
+    const drawerId = draggingDrawer.id;
+    const sourceKey = draggingDrawer.sourceWingKey;
+    draggingDrawer = null;
+    const drawer = findDrawerById(drawerId);
+    if (!drawer) return;
+    openMoveModal(drawer, sourceKey, targetKey);
+  }
+
+  async function refreshSidebarCounts() {
+    try {
+      const [w, t] = await Promise.all([
+        window.KaguyaAPI.getWings(),
+        window.KaguyaAPI.getTaxonomy(),
+      ]);
+      wingsData = w;
+      taxonomyData = t;
+      renderSidebar();
+    } catch (err) {
+      console.error('refresh sidebar counts failed:', err);
+    }
+  }
+
+  function openMoveModal(drawer, sourceWingKey, targetWingKey) {
+    const meta = drawer.metadata || {};
+    const preview = drawer.content_preview || '';
+    const title = truncate(preview, 40) || '(untitled drawer)';
+    const modalSubtitle = drawer.id || '';
+
+    const sourceDataId = apiWingIdToDataId(sourceWingKey);
+    const sourceCfg = lookupWingConfig(sourceDataId);
+    const sourceDisplay = (sourceCfg && sourceCfg.name) || sourceDataId;
+    const originalRoom = meta.room || '';
+    const sourceLabel = `${sourceDisplay} · ${sourceWingKey} / ${originalRoom || '(unassigned)'}`;
+
+    const targetDataId = apiWingIdToDataId(targetWingKey);
+    const targetCfg = lookupWingConfig(targetDataId);
+    const targetDisplay = (targetCfg && targetCfg.name) || targetDataId;
+    const targetLabel = `${targetDisplay} · ${targetWingKey}`;
+
+    const state = { room: originalRoom, error: '', saving: false };
+    let modalActive = true;
+
+    function renderBody() {
+      const errBlock = state.error
+        ? `<div class="kg-modal-error">${esc(state.error)}</div>`
+        : '';
+      return `
+        <form class="kg-modal-form" data-drawer-move-form onsubmit="return false;">
+          <div class="kg-modal-field">
+            <label>原位置</label>
+            <input type="text" value="${esc(sourceLabel)}" readonly />
+          </div>
+          <div class="kg-modal-field">
+            <label>目标 wing</label>
+            <input type="text" value="${esc(targetLabel)}" readonly />
+          </div>
+          <div class="kg-modal-field">
+            <label for="drawer-move-room">目标 room</label>
+            <input id="drawer-move-room" name="room" type="text" value="${esc(state.room)}" placeholder="自由文本,支持新建" />
+          </div>
+          ${errBlock}
+        </form>
+      `;
+    }
+
+    function wireInputs() {
+      const roomEl = document.querySelector('.kg-modal-body #drawer-move-room');
+      if (roomEl) roomEl.addEventListener('input', (e) => { state.room = e.target.value; });
+    }
+
+    function showError(msg) {
+      state.error = msg || '操作失败';
+      if (!modalActive) return;
+      const bodyEl = document.querySelector('.kg-modal-body');
+      if (!bodyEl) return;
+      const existing = bodyEl.querySelector('.kg-modal-error');
+      if (existing) existing.remove();
+      const form = bodyEl.querySelector('.kg-modal-form');
+      const err = document.createElement('div');
+      err.className = 'kg-modal-error';
+      err.textContent = state.error;
+      if (form) form.appendChild(err); else bodyEl.appendChild(err);
+    }
+
+    async function handleConfirm() {
+      if (state.saving || !modalActive) return;
+      const room = state.room;
+      state.saving = true;
+      try {
+        const result = await window.KaguyaAPI.updateDrawer(drawer.id, {
+          wing: targetWingKey,
+          room,
+        });
+        const success = !(result && result.success === false);
+        if (success) {
+          if (modalActive) window.KaguyaModal.close();
+          await refreshSidebarCounts();
+          await invalidateWingsAndRefresh([sourceWingKey, targetWingKey]);
+          return;
+        }
+        if (modalActive) showError(result.error || '移动失败');
+      } catch (err) {
+        console.error('updateDrawer (move) failed:', err);
+        if (modalActive) showError((err && err.message) ? err.message : String(err));
+      } finally {
+        state.saving = false;
+      }
+    }
+
+    window.KaguyaModal.open({
+      title: '移动 drawer',
+      subtitle: modalSubtitle,
+      body: renderBody(),
+      actions: [
+        { label: '取消', variant: 'ghost', onClick: () => window.KaguyaModal.close() },
+        { label: '确认移动', variant: 'primary', onClick: handleConfirm },
+      ],
+      onClose: () => { modalActive = false; },
+    });
+    wireInputs();
+  }
+
   // ---------- init ----------
   document.addEventListener('DOMContentLoaded', async () => {
     // tile clicks → open drawer modal instead of navigating away
@@ -677,6 +873,15 @@
         const drawer = findDrawerById(id);
         if (drawer) openDrawerModal(drawer);
       });
+      sectionEl.addEventListener('dragstart', handleTileDragStart);
+      sectionEl.addEventListener('dragend', handleTileDragEnd);
+    }
+
+    const asideEl = document.querySelector('.wings-layout > aside');
+    if (asideEl) {
+      asideEl.addEventListener('dragover', handleWlDragOver);
+      asideEl.addEventListener('dragleave', handleWlDragLeave);
+      asideEl.addEventListener('drop', handleWlDrop);
     }
 
     try {
