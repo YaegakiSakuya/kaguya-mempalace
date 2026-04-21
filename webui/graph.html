@@ -266,5 +266,317 @@
 </div>
 <script src="assets/data.js"></script>
 <script src="assets/shell.js"></script>
+<script src="assets/api.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const esc = window.KaguyaAPI.escapeHtml;
+  const truncate = window.KaguyaAPI.truncate;
+
+  let entitiesList = [];
+  let currentEntity = null;
+  const tripleCache = new Map();
+  let kgStats = null;
+
+  function renderStats() {
+    const section = document.querySelector('.stats');
+    if (!section) return;
+    const s = kgStats || {};
+    const entities = Number(s.entities || 0);
+    const triples = Number(s.triples || 0);
+    const current = Number(s.current_facts || 0);
+    const expired = Number(s.expired_facts || 0);
+    const relTypes = Array.isArray(s.relationship_types) ? s.relationship_types.length : 0;
+
+    section.innerHTML = `
+      <div class="stat">
+        <div class="stat-label"><span>Entities</span><span class="kanji">実</span></div>
+        <div class="stat-value">${entities}</div>
+        <div class="stat-foot">KG 图谱中的命名实体</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label"><span>Triples</span><span class="kanji">三元</span></div>
+        <div class="stat-value">${triples}</div>
+        <div class="stat-foot">${current} current · ${expired} expired</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label"><span>Relationships</span><span class="kanji">関係</span></div>
+        <div class="stat-value">${relTypes}</div>
+        <div class="stat-foot">种关系类型</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label"><span>Unresolved</span><span class="kanji">未解</span></div>
+        <div class="stat-value" style="color:var(--camellia-text)">—</div>
+        <div class="stat-foot">N/A</div>
+      </div>
+    `;
+  }
+
+  function renderPageHead() {
+    const head = document.querySelector('.page-head');
+    if (!head) return;
+    const s = kgStats || {};
+    const entities = Number(s.entities || 0);
+    const triples = Number(s.triples || 0);
+    const current = Number(s.current_facts || 0);
+    const relTypes = Array.isArray(s.relationship_types) ? s.relationship_types.length : 0;
+    head.innerHTML = `
+      <div>
+        <div class="eyebrow">Knowledge Graph · 知識の網</div>
+        <h1 class="page-title">${triples} 条三元事实，<span class="em">串起 ${entities} 个实体。</span></h1>
+        <p class="page-sub">左栏按创建时间排序列实体；中图是当前选中实体的 1-hop 邻域（最多 10 个邻居）。</p>
+      </div>
+      <div class="page-head-right">
+        <div class="big">${triples}</div>
+        <div>TRIPLES · ${entities} ENT.</div>
+        <div class="accent">${current} CURRENT · ${relTypes} REL. TYPES</div>
+      </div>
+    `;
+  }
+
+  function renderEntitiesRail() {
+    const rail = document.querySelector('.kg-rail');
+    if (!rail) return;
+
+    const head = `
+      <div class="kg-rail-head"><span>Entities · by recent</span><span style="color:var(--camellia-text)">新→旧</span></div>
+      <input class="field" placeholder="过滤 entity…" style="margin-bottom:8px;font-size:12px;padding:7px 10px;" />
+    `;
+
+    const items = entitiesList.map((e, idx) => {
+      const isActive = e.name === currentEntity;
+      const name = e.name || '';
+      const type = e.type || 'entity';
+      return `<a class="kg-entity${isActive ? ' active' : ''}" href="#e-${idx}" data-entity="${esc(name)}">`
+        + `<span class="n">${esc(truncate(name, 28))}</span>`
+        + `<span class="c">—</span>`
+        + `<span class="k">${esc(type)}</span>`
+        + `</a>`;
+    }).join('');
+
+    rail.innerHTML = head + items;
+
+    const input = rail.querySelector('input.field');
+    if (input) {
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        rail.querySelectorAll('.kg-entity').forEach((el) => {
+          const name = (el.dataset.entity || '').toLowerCase();
+          el.style.display = q && !name.includes(q) ? 'none' : '';
+        });
+      });
+    }
+  }
+
+  function renderGraphCanvas(centerEntity, triples) {
+    const svg = document.querySelector('.kg-canvas svg');
+    if (!svg) return;
+
+    const neighborCount = new Map();
+    (triples || []).forEach((t) => {
+      const peer = t.direction === 'outgoing' ? t.object : t.subject;
+      if (!peer || peer === centerEntity) return;
+      neighborCount.set(peer, (neighborCount.get(peer) || 0) + 1);
+    });
+    const neighbors = Array.from(neighborCount.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+
+    const cx = 360, cy = 310, R = 210;
+    const edges = [];
+    const nodes = [];
+
+    nodes.push({ x: cx, y: cy, r: 22, label: centerEntity, hot: true, count: neighborCount.size });
+
+    if (neighbors.length === 0) {
+      svg.innerHTML = `
+        <g transform="translate(${cx} ${cy})">
+          <circle class="kg-node-circle hot selected" r="22"/>
+          <text class="kg-node-label" dy="4">${esc(truncate(centerEntity, 14))}</text>
+          <text class="kg-node-label small" dy="40" style="font-family:var(--mono);letter-spacing:0.18em;">NO NEIGHBORS</text>
+        </g>
+      `;
+      return;
+    }
+
+    const N = neighbors.length;
+    neighbors.forEach(([name, cnt], i) => {
+      const angle = (2 * Math.PI * i / N) - Math.PI / 2;
+      const x = cx + R * Math.cos(angle);
+      const y = cy + R * Math.sin(angle);
+      const r = cnt >= 3 ? 16 : cnt === 2 ? 14 : 10;
+      nodes.push({ x, y, r, label: name, hot: false, count: cnt });
+      edges.push({ x1: cx, y1: cy, x2: x, y2: y, count: cnt });
+    });
+
+    const edgesHtml = edges.map((e) =>
+      `<path class="kg-edge${e.count >= 3 ? ' hot' : ''}" d="M ${e.x1} ${e.y1} L ${e.x2.toFixed(1)} ${e.y2.toFixed(1)}" />`
+    ).join('');
+
+    const nodesHtml = nodes.map((n) => {
+      const hotCls = n.hot ? ' hot selected' : '';
+      return `<g transform="translate(${n.x.toFixed(1)} ${n.y.toFixed(1)})">`
+        + `<circle class="kg-node-circle${hotCls}" r="${n.r}"/>`
+        + `<text class="kg-node-label" dy="${n.hot ? 4 : 3}">${esc(truncate(n.label, 14))}</text>`
+        + `<text class="kg-node-label small" dy="${n.r + 16}" style="font-family:var(--mono);">${n.count}</text>`
+        + `</g>`;
+    }).join('');
+
+    svg.innerHTML = `<g>${edgesHtml}</g><g>${nodesHtml}</g>`;
+  }
+
+  function renderDetailPanel(name, triples) {
+    const aside = document.querySelector('.kg-detail');
+    if (!aside) return;
+
+    const entity = entitiesList.find((e) => e && e.name === name) || {};
+    const type = entity.type || 'entity';
+    const list = Array.isArray(triples) ? triples : [];
+
+    const outgoing = list.filter((t) => t && t.direction === 'outgoing');
+    const incoming = list.filter((t) => t && t.direction === 'incoming');
+    const totalCount = list.length;
+
+    const tripleRows = list.slice(0, 20).map((t) => {
+      const subj = t.subject || '';
+      const obj = t.object || '';
+      const pred = t.predicate || t.relation || '';
+      const isOutgoing = t.direction === 'outgoing';
+      const arrow = isOutgoing ? '→' : '←';
+      const subjHtml = isOutgoing ? esc(truncate(subj, 18)) : esc(truncate(obj, 18));
+      const objHtml = isOutgoing ? esc(truncate(obj, 28)) : esc(truncate(subj, 28));
+      const confRaw = t.confidence;
+      const confNum = (typeof confRaw === 'number') ? confRaw : null;
+      const confCls = (confNum !== null && confNum < 0.7) ? 'conf low' : 'conf';
+      const confHtml = (confNum !== null)
+        ? `<span class="${confCls}">conf ${confNum.toFixed(2)}</span>`
+        : '';
+      const metaParts = [];
+      if (confHtml) metaParts.push(confHtml);
+      if (t.source) metaParts.push(esc(String(t.source).toUpperCase()));
+      const metaHtml = metaParts.length ? `<span class="meta">${metaParts.join(' · ')}</span>` : '';
+      return `<div class="triple">`
+        + `<span class="subj">${subjHtml}</span>`
+        + `<span class="pred">${arrow} ${esc(truncate(pred, 22))}</span>`
+        + `<span class="obj">${objHtml}</span>`
+        + metaHtml
+        + `</div>`;
+    }).join('');
+
+    const emptyListHtml = `<div style="padding:20px;color:var(--text-3);font-size:12px;">该 entity 暂无 triple。</div>`;
+
+    aside.innerHTML = `
+      <div class="kg-d-card">
+        <div class="kg-d-kind">${esc(String(type).toUpperCase())}</div>
+        <h3 class="kg-d-name">${esc(truncate(name, 32))}</h3>
+        <div class="kg-d-stats">
+          <div class="kg-d-stat"><div class="n">${totalCount}</div><span class="k">triples</span></div>
+          <div class="kg-d-stat"><div class="n">${outgoing.length}</div><span class="k">outgoing</span></div>
+          <div class="kg-d-stat"><div class="n">${incoming.length}</div><span class="k">incoming</span></div>
+        </div>
+      </div>
+
+      <div class="kg-d-card" style="padding: 0;">
+        <div style="padding:14px 16px 8px;display:flex;justify-content:space-between;align-items:baseline;">
+          <span class="kicker">Triples</span>
+          <span class="kicker" style="color:var(--text-2)">${totalCount} total</span>
+        </div>
+        <div class="triple-list">
+          ${tripleRows || emptyListHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  async function loadEntityTriples(name) {
+    const svg = document.querySelector('.kg-canvas svg');
+    if (!svg) return;
+    try {
+      let triples = tripleCache.get(name);
+      if (!triples) {
+        const resp = await window.KaguyaAPI.getKgTriples({ entity: name, limit: 50 });
+        triples = Array.isArray(resp) ? resp : (resp && resp.triples) || [];
+        tripleCache.set(name, triples);
+      }
+      if (name !== currentEntity) return;
+      renderGraphCanvas(name, triples);
+      renderDetailPanel(name, triples);
+    } catch (err) {
+      if (name !== currentEntity) return;
+      console.error('loadEntityTriples failed:', err);
+      svg.innerHTML = `<text x="360" y="310" text-anchor="middle" fill="var(--camellia-text)" style="font-family:var(--mono);font-size:12px;">加载失败</text>`;
+    }
+  }
+
+  function onEntityClick(name) {
+    currentEntity = name;
+    document.querySelectorAll('.kg-entity').forEach((el) => {
+      el.classList.toggle('active', el.dataset.entity === name);
+    });
+    loadEntityTriples(name);
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    const rail = document.querySelector('.kg-rail');
+    if (rail) {
+      rail.addEventListener('click', (ev) => {
+        const el = ev.target.closest('.kg-entity');
+        if (!el) return;
+        ev.preventDefault();
+        const name = el.dataset.entity;
+        if (name) onEntityClick(name);
+      });
+    }
+
+    try {
+      const [statsResp, entitiesResp] = await Promise.all([
+        window.KaguyaAPI.getKgStats().catch((err) => { console.error('kg stats failed:', err); return null; }),
+        window.KaguyaAPI.getKgEntities({ limit: 100 }).catch((err) => { console.error('kg entities failed:', err); return null; }),
+      ]);
+
+      kgStats = statsResp || {};
+      renderPageHead();
+      renderStats();
+
+      const rawEntities = Array.isArray(entitiesResp)
+        ? entitiesResp
+        : (entitiesResp && Array.isArray(entitiesResp.entities) ? entitiesResp.entities : []);
+
+      entitiesList = rawEntities.slice().sort((a, b) => {
+        const ta = String(a.created_at || '');
+        const tb = String(b.created_at || '');
+        if (ta === tb) return 0;
+        return ta < tb ? 1 : -1;
+      });
+
+      if (entitiesList.length === 0) {
+        const railEl = document.querySelector('.kg-rail');
+        if (railEl) {
+          railEl.innerHTML = `
+            <div class="kg-rail-head"><span>Entities</span></div>
+            <div style="padding:20px 10px;color:var(--text-3);font-size:12px;">暂无 entity</div>
+          `;
+        }
+        const svg = document.querySelector('.kg-canvas svg');
+        if (svg) {
+          svg.innerHTML = `<text x="360" y="310" text-anchor="middle" fill="var(--text-3)" style="font-family:var(--mono);font-size:12px;letter-spacing:0.16em;">NO ENTITIES YET</text>`;
+        }
+        return;
+      }
+
+      currentEntity = entitiesList[0].name;
+      renderEntitiesRail();
+      await loadEntityTriples(currentEntity);
+    } catch (err) {
+      console.error('graph page init failed:', err);
+      const svg = document.querySelector('.kg-canvas svg');
+      if (svg) {
+        svg.innerHTML = `<text x="360" y="310" text-anchor="middle" fill="var(--camellia-text)" style="font-family:var(--mono);font-size:12px;">加载失败: ${esc(err && err.message ? err.message : String(err))}</text>`;
+      }
+    }
+  });
+})();
+</script>
 </body>
 </html>

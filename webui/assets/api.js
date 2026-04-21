@@ -118,6 +118,10 @@ window.KaguyaAPI = (function () {
     return apiFetch('/graph/tunnels' + buildQuery({ wing_a: wingA, wing_b: wingB }));
   }
 
+  async function getAllTunnels({ wing } = {}) {
+    return apiFetch('/graph/tunnels/list' + buildQuery({ wing }));
+  }
+
   // ----- diary / usage / tools / turns -----
 
   async function getDiary() {
@@ -196,6 +200,7 @@ window.KaguyaAPI = (function () {
     getGraphStats,
     getGraphNodes,
     getGraphTunnels,
+    getAllTunnels,
     getDiary,
     getUsage,
     getToolCalls,
