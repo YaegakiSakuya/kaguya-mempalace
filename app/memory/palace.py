@@ -41,17 +41,6 @@ def _run_mempalace(settings: Settings, *args: str, timeout: int = 30) -> str:
     return result.stdout.strip()
 
 
-def refresh_wakeup(settings: Settings) -> str:
-    settings.wakeup_file.parent.mkdir(parents=True, exist_ok=True)
-    if not settings.wakeup_file.exists():
-        settings.wakeup_file.write_text("", encoding="utf-8")
-    return settings.wakeup_file.read_text(encoding="utf-8").strip()
-
-
-def read_wakeup(settings: Settings) -> str:
-    return refresh_wakeup(settings)
-
-
 def palace_status(settings: Settings) -> str:
     return _run_mempalace(settings, "status", timeout=20)
 

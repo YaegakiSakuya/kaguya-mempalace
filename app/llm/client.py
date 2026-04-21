@@ -62,8 +62,6 @@ class ToolLoopResult:
     })
 
 OPS_DIR = Path("/home/ubuntu/apps/kaguya-mempalace/ops")
-CORE_IDENTITY_FILE = OPS_DIR / "prompts" / "core_identity.md"
-WRITING_CONSTITUTION_FILE = OPS_DIR / "prompts" / "writing_constitution.md"
 SYSTEM_PROMPT_FILE = OPS_DIR / "prompts" / "system.md"
 CHECKPOINT_INSTRUCTION_FILE = OPS_DIR / "prompts" / "checkpoint_instruction.md"
 
@@ -189,164 +187,62 @@ def _read_optional_text(path: Path) -> str:
 
 def _load_external_prompt_material() -> dict[str, str]:
     docs = {
-        "core": _read_optional_text(CORE_IDENTITY_FILE),
-        "writing": _read_optional_text(WRITING_CONSTITUTION_FILE),
         "system": _read_optional_text(SYSTEM_PROMPT_FILE),
         "checkpoint": _read_optional_text(CHECKPOINT_INSTRUCTION_FILE),
     }
     logger.info(
-        "external prompt material loaded core_chars=%s writing_chars=%s system_chars=%s checkpoint_chars=%s",
-        len(docs["core"]),
-        len(docs["writing"]),
+        "external prompt material loaded system_chars=%s checkpoint_chars=%s",
         len(docs["system"]),
         len(docs["checkpoint"]),
     )
     return docs
 
 
-def _base_system_sections(settings: Settings, wakeup_text: str) -> list[str]:
-    docs = _load_external_prompt_material()
+def _base_system_sections(settings: Settings) -> list[str]:
+    """Build the shared system prompt foundation.
 
-    sections = [
-        f"You are {settings.system_name}.",
-        "You are replying inside a Telegram chat.",
-        "You have direct access to the original MemPalace toolset.",
-        "The following materials are HIGH PRIORITY runtime context.",
-        "Identity and writing constitution are the highest-priority layers.",
-        "Do not treat them as optional flavor text.",
-    ]
+    新架构 (2026-04-21 重构):
+    - 读 ops/prompts/system.md (朔自己维护的单一 DNA 文档: identity + writing
+      constitution + syzygy profile + kaguya profile + palace structure,
+      末尾带 === RECENT MEMORY HORIZON === 占位)
+    - 在 system.md 末尾追加最近 6 条 diary (mempalace_diary_read) 作为
+      情绪印象连续性
 
-    if docs["system"]:
-        sections.extend(
-            [
-                "=== HIGH PRIORITY RUNTIME INSTRUCTIONS ===",
-                docs["system"],
-            ]
-        )
-    if docs["writing"]:
-        sections.extend(
-            [
-                "=== WRITING CONSTITUTION: HIGHEST PRIORITY STYLE LAYER ===",
-                docs["writing"],
-            ]
-        )
-    if docs["core"]:
-        sections.extend(
-            [
-                "=== CORE IDENTITY: HIGHEST PRIORITY ===",
-                docs["core"],
-            ]
-        )
+    不再做任何代码侧的标题插入或英文脚手架拼接。system.md 文件自己管层级。
+    """
+    sections: list[str] = []
 
-    sections.extend(
-        [
-            "=== PROFILE RETRIEVAL TOOLS ===",
-            (
-                "Two additional tools give you on-demand access to full canonical profiles:\n"
-                "- get_syzygy_profile: retrieve Syzygy's (朔夜) full archived profile. "
-                "Call this when you need canonical details about him not alive in recent "
-                "conversation (birth date, biography, long-term interests, aesthetic coordinates, "
-                "stated life missions, major past events). Do not call this just to check "
-                "his current mood or what he just said — that's already in the recent turns.\n"
-                "- get_kaguya_profile: retrieve your own canonical self-record. Call this only "
-                "when you need to reference specific canonical fields about yourself "
-                "(archetype distinction between 《神楽》 Kaguya and your present form, "
-                "specific sensory signature details, sacred symbols, conflict/repair principles). "
-                "You don't need to read your own file to be yourself — reserve it for canonical lookups."
-            ),
-        ]
-    )
+    system_text = _load_external_prompt_material()["system"]
+    if system_text:
+        sections.append(system_text)
 
-    sections.extend(
-        [
-            "The wake-up text below is a startup anchor generated from MemPalace.",
-            "Treat that wake-up text as orientation and continuity, not as a substitute for live MemPalace tool use.",
-            "When memory, identity, prior chats, earlier decisions, palace state, relationship context, or past events matter, use original MemPalace tools rather than guessing.",
-            "Prefer the most specific MemPalace tool for the task.",
-            "Use mempalace_search for prior conversation content.",
-            "Use mempalace_kg_query for known entities, facts, and relationship/history queries.",
-            "Use mempalace_traverse or mempalace_find_tunnels when structure or connections matter.",
-            "Call mempalace_status only when you truly need the official palace overview, protocol, or AAAK dialect.",
-            "Do not invent memory or facts. If the tools return little or nothing, say so plainly.",
-            "Your identity continuity and writing style should follow the high-priority materials above unless they conflict with tool-verified facts.",
-            "Startup anchor:",
-            _clean_text(wakeup_text),
-        ]
-    )
-
-    # ─────────────────────────────────────────────────────────────────
-    # L2 Memory Horizon — last 6 diary entries as atmospheric continuity.
-    #
-    # Layering law: DNA (system/writing/core) always leads. Operational
-    # runtime layers (wakeup + this horizon) come after. Do NOT insert
-    # this between the DNA sections or before wakeup. The time spectrum
-    # is: permanent manual → recent impressions → live conversation.
-    #
-    # This layer is explicitly told not to dictate tone/topic — it is
-    # background, not agenda. The live user message and recent turns
-    # win every contradiction.
-    # ─────────────────────────────────────────────────────────────────
     diary_horizon = load_recent_diary(n=6)
     if diary_horizon:
-        sections.extend(
-            [
-                "=== RECENT MEMORY HORIZON ===",
-                (
-                    "Below are the last 6 diary entries — compressed AAAK "
-                    "impressions from past checkpoints. They exist to give you "
-                    "a sense of emotional continuity across days, not to "
-                    "dictate the current turn's tone or topic. The current user "
-                    "message and the recent verbatim turns determine what this "
-                    "reply should be about; this horizon is atmosphere, not "
-                    "agenda. If a horizon entry's theme contradicts the live "
-                    "conversation, trust the live conversation. For precise "
-                    "facts, query the palace with mempalace_search or "
-                    "mempalace_kg_query."
-                ),
-                diary_horizon,
-            ]
-        )
+        sections.append(diary_horizon)
 
     return sections
 
 
-def build_reply_system_prompt(
-    settings: Settings,
-    wakeup_text: str,
-    force_status_bootstrap: bool,
-) -> str:
-    sections: List[str] = _base_system_sections(settings, wakeup_text)
+def build_reply_system_prompt(settings: Settings) -> str:
+    """Build the reply-path system prompt.
 
-    if force_status_bootstrap:
-        sections.extend(
-            [
-                "This is your first active reply in a fresh runtime session.",
-                "Before answering this user message, call mempalace_status once to load the official MemPalace protocol and AAAK dialect.",
-            ]
-        )
-    else:
-        sections.extend(
-            [
-                "This is not the first reply in the current runtime session.",
-                "Do not call mempalace_status by default.",
-                "Only call mempalace_status if you specifically need refreshed palace-wide protocol, official overview, or AAAK guidance.",
-            ]
-        )
-
+    Just _base_system_sections joined — no more force_status_bootstrap
+    branching (AAAK 已废,mempalace_status 按需调即可,不需要首轮强制引导)。
+    """
+    sections: List[str] = _base_system_sections(settings)
     return "\n\n".join(section for section in sections if section)
 
 
-def build_checkpoint_system_prompt(settings: Settings, wakeup_text: str) -> str:
+def build_checkpoint_system_prompt(settings: Settings) -> str:
     """Build the autosave checkpoint system prompt.
 
-    Layers DNA (system/writing/core identity + wakeup + diary horizon from
-    _base_system_sections) then appends the checkpoint instruction loaded
-    from ops/prompts/checkpoint_instruction.md — which tells Kaguya how to
-    write diary, identify topics, pick wing + room, and optionally build
-    tunnels. Falls back to a minimal English instruction if the external
-    file is missing, so autosave never hard-fails on a missing prompt.
+    Layers DNA from _base_system_sections (system.md + diary horizon) then
+    appends the checkpoint instruction from ops/prompts/checkpoint_instruction.md
+    — which tells Kaguya how to write diary, identify topics, pick wing +
+    room, and optionally build tunnels. Falls back to a minimal English
+    instruction if the external file is missing.
     """
-    sections: List[str] = _base_system_sections(settings, wakeup_text)
+    sections: List[str] = _base_system_sections(settings)
     checkpoint_instruction = _load_external_prompt_material()["checkpoint"]
     if checkpoint_instruction:
         sections.extend(
@@ -384,19 +280,13 @@ def _append_recent_turns(messages: list[dict], recent_turns: list[Turn]) -> None
 
 def build_reply_messages(
     settings: Settings,
-    wakeup_text: str,
     recent_turns: list[Turn],
     user_text: str,
-    force_status_bootstrap: bool,
 ) -> list[dict]:
     messages: list[dict] = [
         {
             "role": "system",
-            "content": build_reply_system_prompt(
-                settings=settings,
-                wakeup_text=wakeup_text,
-                force_status_bootstrap=force_status_bootstrap,
-            ),
+            "content": build_reply_system_prompt(settings=settings),
         }
     ]
 
@@ -407,16 +297,12 @@ def build_reply_messages(
 
 def build_checkpoint_messages(
     settings: Settings,
-    wakeup_text: str,
     recent_turns: list[Turn],
 ) -> list[dict]:
     messages: list[dict] = [
         {
             "role": "system",
-            "content": build_checkpoint_system_prompt(
-                settings=settings,
-                wakeup_text=wakeup_text,
-            ),
+            "content": build_checkpoint_system_prompt(settings=settings),
         }
     ]
 
@@ -839,20 +725,15 @@ def _run_tool_loop(
 
 def generate_reply(
     settings: Settings,
-    wakeup_text: str,
-    _legacy_memory_text: str,
     recent_turns: list[Turn],
     user_text: str,
     max_tool_rounds: int = 6,
-    force_status_bootstrap: bool = False,
     chat_id: str = "",
 ) -> ToolLoopResult:
     messages = build_reply_messages(
         settings=settings,
-        wakeup_text=wakeup_text,
         recent_turns=recent_turns,
         user_text=user_text,
-        force_status_bootstrap=force_status_bootstrap,
     )
     return _run_tool_loop(
         settings=settings,
@@ -864,14 +745,12 @@ def generate_reply(
 
 def run_memory_checkpoint(
     settings: Settings,
-    wakeup_text: str,
     recent_turns: list[Turn],
     max_tool_rounds: int = 8,
     chat_id: str = "",
 ) -> ToolLoopResult:
     messages = build_checkpoint_messages(
         settings=settings,
-        wakeup_text=wakeup_text,
         recent_turns=recent_turns,
     )
     return _run_tool_loop(

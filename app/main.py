@@ -42,7 +42,7 @@ from app.inspector.logger import append_jsonl, _now_iso
 from app.llm.client import ToolLoopResult, generate_reply, run_memory_checkpoint
 from app.media import IngestResult, MediaClient, VisionAgent, ingest_image
 from app.media.voice_queue import drain as drain_voice_queue
-from app.memory.palace import mine_conversations, read_wakeup, refresh_wakeup
+from app.memory.palace import mine_conversations
 from app.memory.state import increment_message_count, reset_message_count
 from app.memory.transcript import append_turn, load_recent_turns
 
@@ -120,13 +120,10 @@ async def run_autosave(application: Application, settings: Settings, chat_id: st
                 chat_id,
                 checkpoint_turn_limit(settings),
             )
-            wakeup_text = await asyncio.to_thread(read_wakeup, settings)
-
             if recent_turns:
                 checkpoint_result = await asyncio.to_thread(
                     run_memory_checkpoint,
                     settings,
-                    wakeup_text,
                     recent_turns,
                     8,
                     chat_id,
@@ -142,10 +139,6 @@ async def run_autosave(application: Application, settings: Settings, chat_id: st
                 await asyncio.to_thread(mine_conversations, settings)
             except Exception:
                 logger.exception("mine_conversations failed for chat_id=%s (non-fatal)", chat_id)
-            try:
-                await asyncio.to_thread(refresh_wakeup, settings)
-            except Exception:
-                logger.exception("refresh_wakeup failed for chat_id=%s (non-fatal)", chat_id)
 
             logger.info("autosave finished for chat_id=%s", chat_id)
         except Exception:
@@ -173,7 +166,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings: Settings = context.application.bot_data["settings"]
-    bootstrapped_chats: set[str] = context.application.bot_data["bootstrapped_chats"]
 
     if not update.effective_chat or not update.message or not update.message.text:
         return
@@ -187,8 +179,6 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not user_text:
         return
 
-    force_status_bootstrap = chat_id not in bootstrapped_chats
-
     try:
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
 
@@ -198,17 +188,13 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             chat_id,
             settings.recent_turns,
         )
-        wakeup_text = await asyncio.to_thread(read_wakeup, settings)
 
         loop_result = await asyncio.to_thread(
             generate_reply,
             settings,
-            wakeup_text,
-            "",
             recent_turns,
             user_text,
             6,
-            force_status_bootstrap,
             chat_id,
         )
         assistant_text = loop_result.reply_text
@@ -276,8 +262,6 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         _write_turn_summary(settings.logs_dir, loop_result, "reply", chat_id)
 
-        bootstrapped_chats.add(chat_id)
-
         count = await asyncio.to_thread(
             increment_message_count,
             settings.state_dir,
@@ -285,10 +269,9 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
         logger.info(
-            "handled message chat_id=%s count=%s bootstrap=%s",
+            "handled message chat_id=%s count=%s",
             chat_id,
             count,
-            force_status_bootstrap,
         )
 
         if count == settings.autosave_user_message_interval:
@@ -305,7 +288,6 @@ async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     与 text_message 结构对称,差异只在最前面的"造 user_text"那一段。
     """
     settings: Settings = context.application.bot_data["settings"]
-    bootstrapped_chats: set[str] = context.application.bot_data["bootstrapped_chats"]
     media_client: MediaClient | None = context.application.bot_data.get("media_client")
     vision_agent: VisionAgent | None = context.application.bot_data.get("vision_agent")
 
@@ -326,8 +308,6 @@ async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     caption = (update.message.caption or "").strip() or None
     user_id = update.effective_user.id if update.effective_user else 0
     message_id = update.message.message_id
-
-    force_status_bootstrap = chat_id not in bootstrapped_chats
 
     try:
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
@@ -365,17 +345,13 @@ async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             chat_id,
             settings.recent_turns,
         )
-        wakeup_text = await asyncio.to_thread(read_wakeup, settings)
 
         loop_result = await asyncio.to_thread(
             generate_reply,
             settings,
-            wakeup_text,
-            "",
             recent_turns,
             user_text_equiv,
             6,
-            force_status_bootstrap,
             chat_id,
         )
         assistant_text = loop_result.reply_text
@@ -443,8 +419,6 @@ async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         _write_turn_summary(settings.logs_dir, loop_result, "reply", chat_id)
 
-        bootstrapped_chats.add(chat_id)
-
         count = await asyncio.to_thread(
             increment_message_count,
             settings.state_dir,
@@ -452,10 +426,9 @@ async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
         logger.info(
-            "handled photo chat_id=%s count=%s bootstrap=%s",
+            "handled photo chat_id=%s count=%s",
             chat_id,
             count,
-            force_status_bootstrap,
         )
 
         if count == settings.autosave_user_message_interval:
@@ -469,7 +442,6 @@ async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def post_init(application: Application) -> None:
     settings: Settings = application.bot_data["settings"]
     application.bot_data["autosave_lock"] = asyncio.Lock()
-    application.bot_data["bootstrapped_chats"] = set()
 
     # 初始化视觉代理相关的长连接组件(只在 SILICONFLOW_API_KEY 和 KAGUYA_MEDIA_* 都配齐时启用)
     if settings.kaguya_media_url and settings.kaguya_media_service_key and settings.siliconflow_api_key:
@@ -493,12 +465,6 @@ async def post_init(application: Application) -> None:
         application.bot_data["media_client"] = None
         application.bot_data["vision_agent"] = None
 
-    try:
-        await asyncio.to_thread(refresh_wakeup, settings)
-        logger.info("startup wake-up refreshed")
-    except Exception:
-        logger.exception("startup wake-up refresh failed")
-
 
 async def post_shutdown(application: Application) -> None:
     settings: Settings = application.bot_data["settings"]
@@ -514,7 +480,6 @@ async def post_shutdown(application: Application) -> None:
     try:
         if has_any_transcripts(settings):
             await asyncio.to_thread(mine_conversations, settings)
-            await asyncio.to_thread(refresh_wakeup, settings)
         logger.info("shutdown autosave completed")
     except Exception:
         logger.exception("shutdown autosave failed")

@@ -27,7 +27,6 @@ class Settings:
     chats_dir: Path
     logs_dir: Path
     state_dir: Path
-    wakeup_file: Path
     autosave_user_message_interval: int
     search_top_k: int
     recent_turns: int
@@ -61,7 +60,6 @@ def load_settings() -> Settings:
         chats_dir=Path(os.getenv("CHATS_DIR", str(base_dir / "runtime" / "chats"))).resolve(),
         logs_dir=Path(os.getenv("LOGS_DIR", str(base_dir / "runtime" / "logs"))).resolve(),
         state_dir=Path(os.getenv("STATE_DIR", str(base_dir / "runtime" / "state"))).resolve(),
-        wakeup_file=Path(os.getenv("WAKEUP_FILE", str(base_dir / "runtime" / "wakeup.txt"))).resolve(),
         autosave_user_message_interval=int(os.getenv("AUTOSAVE_USER_MESSAGE_INTERVAL", "15")),
         search_top_k=int(os.getenv("SEARCH_TOP_K", "8")),
         recent_turns=int(os.getenv("RECENT_TURNS", "8")),
@@ -91,9 +89,5 @@ def load_settings() -> Settings:
 
     for path in [settings.chats_dir, settings.logs_dir, settings.state_dir, settings.palace_path, settings.media_uploads_dir]:
         path.mkdir(parents=True, exist_ok=True)
-
-    settings.wakeup_file.parent.mkdir(parents=True, exist_ok=True)
-    if not settings.wakeup_file.exists():
-        settings.wakeup_file.write_text("", encoding="utf-8")
 
     return settings
