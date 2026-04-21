@@ -90,6 +90,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/shell.js"></script>
 <script src="assets/api.js"></script>
+<script src="assets/modal.js"></script>
 <script>
 (function () {
   'use strict';
@@ -410,14 +411,57 @@
     return keys.length ? keys[0] : null;
   }
 
+  // ---------- drawer detail modal ----------
+  function findDrawerById(id) {
+    if (!id) return null;
+    for (const [, list] of drawerCache) {
+      if (!Array.isArray(list)) continue;
+      const hit = list.find((d) => d && d.id === id);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function openDrawerModal(drawer) {
+    if (!drawer) return;
+    const meta = drawer.metadata || {};
+    const preview = drawer.content_preview || '';
+    const full = drawer.content_full || preview;
+    const title = truncate(preview, 40) || '(untitled drawer)';
+    const subParts = [];
+    if (meta.wing) subParts.push(meta.wing);
+    if (meta.room) subParts.push(meta.room);
+    const subtitle = subParts.join(' · ');
+
+    const metaRows = [
+      ['ID', drawer.id || '—'],
+      ['Wing', meta.wing || '—'],
+      ['Room', meta.room || '—'],
+      ['Filed', meta.filed_at || '—'],
+      ['Chunk', (meta.chunk_index !== undefined && meta.chunk_index !== null) ? String(meta.chunk_index) : '—'],
+      ['Added by', meta.added_by || '—'],
+    ].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+
+    const body = `
+      <dl class="kg-modal-metagrid">${metaRows}</dl>
+      <div class="kg-modal-fulltext">${esc(full)}</div>
+    `;
+
+    window.KaguyaModal.open({ title, subtitle, body });
+  }
+
   // ---------- init ----------
   document.addEventListener('DOMContentLoaded', async () => {
-    // prevent drawer tile anchors from clearing the wing hash on click
+    // tile clicks → open drawer modal instead of navigating away
     const sectionEl = document.querySelector('.wings-layout > section');
     if (sectionEl) {
       sectionEl.addEventListener('click', (e) => {
         const tile = e.target.closest && e.target.closest('.d-tile');
-        if (tile) e.preventDefault();
+        if (!tile) return;
+        e.preventDefault();
+        const id = tile.dataset.drawerId;
+        const drawer = findDrawerById(id);
+        if (drawer) openDrawerModal(drawer);
       });
     }
 

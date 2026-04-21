@@ -29,6 +29,7 @@
   .hm-cell.l4 { background: var(--camellia); }
   .hm-cell.today { outline: 1px solid var(--text); outline-offset: 1px; }
   .hm-cell:hover { outline: 1px solid var(--camellia); outline-offset: 1px; }
+  .hm-cell.selected { outline: 1.5px solid var(--camellia); outline-offset: 1px; }
   .hm-cell .tip {
     position: absolute; bottom: calc(100% + 8px); left: 50%;
     transform: translate(-50%, 4px); opacity: 0; pointer-events: none;
@@ -228,11 +229,17 @@
 <script src="assets/data.js"></script>
 <script src="assets/shell.js"></script>
 <script src="assets/api.js"></script>
+<script src="assets/modal.js"></script>
 <script>
 (function () {
   'use strict';
 
   const esc = (s) => window.KaguyaAPI.escapeHtml(s);
+
+  // shared page-level state for heatmap ↔ Today card linkage
+  const diaryByDate = Object.create(null);
+  let realTodayEntry = null;
+  let selectedDate = null;
 
   // ---------- date helpers ----------
   function toDateStr(d) {
@@ -399,8 +406,9 @@
         else if (count >= 5) lvl = 4;
         const isToday = d.getTime() === today.getTime();
         const tipLabel = count ? `${count} entries` : '—';
+        const dateAttr = count ? ` data-diary-date="${dstr}"` : '';
         html.push(
-          `<div class="hm-cell${lvl ? ' l' + lvl : ''}${isToday ? ' today' : ''}" title="${dstr}: ${count} entries"><span class="tip">${dstr}<span class="t">${tipLabel}</span></span></div>`
+          `<div class="hm-cell${lvl ? ' l' + lvl : ''}${isToday ? ' today' : ''}"${dateAttr} title="${dstr}: ${count} entries"><span class="tip">${dstr}<span class="t">${tipLabel}</span></span></div>`
         );
       }
     }
@@ -409,8 +417,10 @@
     grid.style.gridAutoFlow = 'row';
   }
 
-  function renderTodaySectionHead(entry) {
-    const head = document.querySelector('.diary-layout .section-head h2');
+  function renderTodaySectionHead(entry, showTodayLink) {
+    const sectionHeadEl = document.querySelector('.diary-layout .section-head');
+    if (!sectionHeadEl) return;
+    const head = sectionHeadEl.querySelector('h2');
     if (!head) return;
     let monthSlashDay = '-- / --';
     let weekdayCn = '';
@@ -420,6 +430,15 @@
       weekdayCn = WEEKDAYS_CN[d.getDay()] + '曜';
     }
     head.innerHTML = `Today · ${monthSlashDay} <span class="jp">${weekdayCn}</span>`;
+
+    const action = sectionHeadEl.querySelector('.action');
+    if (action) {
+      if (showTodayLink) {
+        action.innerHTML = `<a href="#" id="__diary-return-today" style="color:var(--text-3);font-size:11px;font-family:var(--mono);letter-spacing:0.18em;text-transform:uppercase;text-decoration:none;">today</a>`;
+      } else {
+        action.innerHTML = 'Edit →';
+      }
+    }
   }
 
   function renderToday(entry) {
@@ -569,6 +588,69 @@
     content.innerHTML = `<div style="padding:40px;color:var(--camellia-text);font-size:13px;">diary 加载失败: ${esc(msg)}</div>`;
   }
 
+  // ---------- diary detail modal ----------
+  function openDiaryModal(entry) {
+    if (!entry) return;
+    const date = entry.date || '';
+    const agent = entry.agent || 'kaguya';
+    const topic = entry.topic || '';
+    const content = entry.content || entry.body || entry.text || '';
+    const metaRows = [
+      ['Date', date || '—'],
+      ['Agent', agent],
+      ['Topic', topic || '—'],
+    ].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+    const body = `
+      <dl class="kg-modal-metagrid">${metaRows}</dl>
+      <div class="kg-modal-fulltext">${esc(content)}</div>
+    `;
+    window.KaguyaModal.open({
+      title: date || topic || 'diary',
+      subtitle: `${agent} · diary`,
+      body,
+    });
+  }
+
+  // ---------- heatmap ↔ Today card linkage ----------
+  function updateHeatmapSelection(date) {
+    const grid = document.getElementById('hm-grid');
+    if (!grid) return;
+    grid.querySelectorAll('.hm-cell.selected').forEach((c) => c.classList.remove('selected'));
+    if (!date) return;
+    const cell = grid.querySelector(`.hm-cell[data-diary-date="${CSS.escape(date)}"]`);
+    if (cell) cell.classList.add('selected');
+  }
+
+  function showEntryInTodayCard(entry, isRealToday) {
+    renderTodaySectionHead(entry, !isRealToday);
+    renderToday(entry);
+  }
+
+  function showRealToday() {
+    selectedDate = null;
+    updateHeatmapSelection(null);
+    showEntryInTodayCard(realTodayEntry, true);
+  }
+
+  function showDateInTodayCard(date) {
+    if (!date) return;
+    const entry = diaryByDate[date];
+    selectedDate = date;
+    updateHeatmapSelection(date);
+    const realTodayDate = realTodayEntry && realTodayEntry.date;
+    const isRealToday = !!realTodayDate && realTodayDate === date;
+    if (entry) {
+      showEntryInTodayCard(entry, isRealToday);
+      return;
+    }
+    // heatmap cell exists but diary entry wasn't loaded (paging)
+    renderTodaySectionHead({ date }, !isRealToday);
+    const card = document.querySelector('.today-card');
+    if (card) {
+      card.innerHTML = `<div style="padding:20px;color:var(--text-3);font-size:12.5px;line-height:1.8;">${esc(date)} 的 diary 未加载</div>`;
+    }
+  }
+
   // ---------- init ----------
   async function init() {
     let diaryData;
@@ -591,7 +673,10 @@
       if (!date) return;
       dateSet.add(date);
       entriesByDate.set(date, (entriesByDate.get(date) || 0) + 1);
+      // keep the first occurrence per date (API returns newest-first)
+      if (!diaryByDate[date]) diaryByDate[date] = e;
     });
+    realTodayEntry = entries[0] || null;
 
     const totalDays = dateSet.size;
     const totalEntries = entries.length;
@@ -608,6 +693,43 @@
     try { renderStreakBars(dateSet); } catch (e) { console.error('streakBars:', e); }
     try { renderBlockCountsCard(); } catch (e) { console.error('blockCounts:', e); }
     try { renderLinkedDrawersCard(); } catch (e) { console.error('linked:', e); }
+
+    // ---------- interactions ----------
+    // heatmap cell click → replace Today card
+    const grid = document.getElementById('hm-grid');
+    if (grid) {
+      grid.addEventListener('click', (ev) => {
+        const cell = ev.target.closest && ev.target.closest('.hm-cell');
+        if (!cell) return;
+        const date = cell.dataset.diaryDate;
+        if (!date) return;
+        showDateInTodayCard(date);
+      });
+    }
+
+    // past-week drawer click → open diary modal
+    const pastStack = document.querySelector('.diary-layout .drawer-stack');
+    if (pastStack) {
+      pastStack.addEventListener('click', (ev) => {
+        const el = ev.target.closest && ev.target.closest('.drawer[data-diary-date]');
+        if (!el) return;
+        ev.preventDefault();
+        const date = el.dataset.diaryDate;
+        const entry = diaryByDate[date];
+        if (entry) openDiaryModal(entry);
+      });
+    }
+
+    // "today" return link (delegated on section-head)
+    const todaySectionHead = document.querySelector('.diary-layout .section-head');
+    if (todaySectionHead) {
+      todaySectionHead.addEventListener('click', (ev) => {
+        const link = ev.target.closest && ev.target.closest('#__diary-return-today');
+        if (!link) return;
+        ev.preventDefault();
+        showRealToday();
+      });
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);
