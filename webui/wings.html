@@ -193,28 +193,32 @@
     const map = wingsMap();
     const tax = taxonomyMap();
 
-    const entries = Object.keys(map).map((apiKey) => {
+    // γ: iterate data.js wings as source of truth for architecture
+    const allWings = (window.KAGUYA && window.KAGUYA.wings) || [];
+    const entries = allWings.map((wingCfg) => {
+      const apiKey = dataIdToApiWingKey(wingCfg.id);
       const drawerCount = Number(map[apiKey] || 0);
-      const dataId = apiWingIdToDataId(apiKey);
-      const cfg = lookupWingConfig(dataId);
       const rooms = normalizeRoomsFor(tax[apiKey]);
       return {
         apiKey,
-        dataId,
+        dataId: wingCfg.id,
         drawerCount,
-        displayName: (cfg && cfg.name) || dataId,
-        code: (cfg && cfg.code) || '',
+        displayName: wingCfg.name || wingCfg.id,
+        code: wingCfg.code || '',
         rooms,
         roomCount: rooms.length,
+        isArchive: !!wingCfg.archive,
       };
     });
 
     const content = entries
-      .filter((e) => e.apiKey !== 'chats' && e.drawerCount >= 2)
+      .filter((e) => !e.isArchive && e.drawerCount >= 2)
       .sort((a, b) => b.drawerCount - a.drawerCount);
     const sparse = entries
-      .filter((e) => e.apiKey !== 'chats' && e.drawerCount === 1);
-    const archive = entries.find((e) => e.apiKey === 'chats');
+      .filter((e) => !e.isArchive && e.drawerCount === 1);
+    const dormant = entries
+      .filter((e) => !e.isArchive && e.drawerCount === 0);
+    const archive = entries.find((e) => e.isArchive);
 
     let html = '';
 
@@ -246,6 +250,22 @@
           + `<span class="wl-name sparse">${esc(e.displayName)}</span>`
           + `<span class="wl-meta">${e.drawerCount}</span>`
           + subHtml
+          + `</a>`;
+      });
+      html += `</nav>`;
+    }
+
+    // Dormant group (0 drawers — architecture skeleton)
+    if (dormant.length) {
+      html += `<div class="wl-sep">Dormant · ${dormant.length}</div>`;
+      html += `<nav class="wing-list">`;
+      dormant.forEach((e) => {
+        const active = e.apiKey === currentWingKey ? ' active' : '';
+        const codePart = e.code ? esc(e.code.toLowerCase()) + ' \u00b7 ' : '';
+        html += `<a class="wl-item${active}" href="#${esc(e.dataId)}" data-wing-key="${esc(e.apiKey)}" style="opacity:0.5">`
+          + `<span class="wl-name sparse">${esc(e.displayName)}</span>`
+          + `<span class="wl-meta">0</span>`
+          + `<span class="wl-sub">${codePart}awaiting</span>`
           + `</a>`;
       });
       html += `</nav>`;
@@ -436,12 +456,18 @@
 
   function pickInitialWing() {
     const hash = location.hash.replace(/^#/, '');
-    const map = wingsMap();
+    const allWings = (window.KAGUYA && window.KAGUYA.wings) || [];
     if (hash) {
       const apiKey = dataIdToApiWingKey(hash);
-      if (apiKey in map) return apiKey;
+      // accept if wing exists in data.js or API
+      const inData = allWings.some((w) => w.id === hash);
+      const map = wingsMap();
+      if (inData || apiKey in map) return apiKey;
     }
-    if ('wing_US' in map) return 'wing_US';
+    // default: first non-archive wing from data.js
+    const first = allWings.find((w) => !w.archive);
+    if (first) return dataIdToApiWingKey(first.id);
+    const map = wingsMap();
     const keys = Object.keys(map);
     return keys.length ? keys[0] : null;
   }
@@ -510,10 +536,10 @@
     }
 
     function renderEditBody() {
-      const wingOptions = Object.keys(wingsMap()).map((key) => {
-        const dataId = apiWingIdToDataId(key);
-        const cfg = lookupWingConfig(dataId);
-        const display = (cfg && cfg.name) || dataId;
+      const ddWings = (window.KAGUYA && window.KAGUYA.wings) || [];
+      const wingOptions = ddWings.filter((w) => !w.archive).map((w) => {
+        const key = dataIdToApiWingKey(w.id);
+        const display = w.name || w.id;
         const sel = key === editState.wing ? ' selected' : '';
         return `<option value="${esc(key)}"${sel}>${esc(display)} (${esc(key)})</option>`;
       }).join('');
@@ -811,8 +837,8 @@
   async function refreshSidebarCounts() {
     try {
       const [w, t] = await Promise.all([
-        window.KaguyaAPI.getWings(),
-        window.KaguyaAPI.getTaxonomy(),
+        window.KaguyaAPI.getWings().catch(() => ({})),
+        window.KaguyaAPI.getTaxonomy().catch(() => ({})),
       ]);
       wingsData = w;
       taxonomyData = t;
@@ -953,23 +979,30 @@
       asideEl.addEventListener('drop', handleWlDrop);
     }
 
+    // γ: graceful fallback — API failure should not block architecture display
     try {
       [wingsData, taxonomyData] = await Promise.all([
-        window.KaguyaAPI.getWings(),
-        window.KaguyaAPI.getTaxonomy(),
+        window.KaguyaAPI.getWings().catch((e) => { console.warn('getWings failed (ok for empty palace):', e.message); return {}; }),
+        window.KaguyaAPI.getTaxonomy().catch((e) => { console.warn('getTaxonomy failed:', e.message); return {}; }),
       ]);
-      renderSidebar();
-      const initial = pickInitialWing();
-      if (initial) {
-        await loadWingDetail(initial);
-      } else {
-        const section = document.querySelector('.wings-layout > section');
-        if (section) section.innerHTML = '<div style="padding:40px;color:var(--text-3);">暂无 wing 数据。</div>';
-      }
     } catch (err) {
-      console.error('wings page init failed:', err);
-      const root = document.querySelector('.wings-layout');
-      if (root) root.innerHTML = `<div style="padding:40px;color:var(--camellia-text);">加载失败: ${esc(err && err.message ? err.message : String(err))}</div>`;
+      console.warn('wings data fetch failed, rendering skeleton:', err);
+      wingsData = {};
+      taxonomyData = {};
+    }
+    renderSidebar();
+    const initial = pickInitialWing();
+    if (initial) {
+      try {
+        await loadWingDetail(initial);
+      } catch (detailErr) {
+        console.warn('loadWingDetail failed for', initial, detailErr);
+        const section = document.querySelector('.wings-layout > section');
+        if (section) section.innerHTML = '<div style="padding:40px;color:var(--text-3);">Palace 尚未初始化。Wing 架构已就绪，等待数据写入。</div>';
+      }
+    } else {
+      const section = document.querySelector('.wings-layout > section');
+      if (section) section.innerHTML = '<div style="padding:40px;color:var(--text-3);">暂无 wing 数据。</div>';
     }
   });
 
@@ -977,8 +1010,9 @@
     const hash = location.hash.replace(/^#/, '');
     if (!hash) return;
     const apiKey = dataIdToApiWingKey(hash);
-    const map = wingsMap();
-    if (!(apiKey in map)) return;
+    const allWings = (window.KAGUYA && window.KAGUYA.wings) || [];
+    const known = allWings.some((w) => w.id === hash);
+    if (!known) { const map = wingsMap(); if (!(apiKey in map)) return; }
     if (apiKey === currentWingKey) return;
     loadWingDetail(apiKey);
   });

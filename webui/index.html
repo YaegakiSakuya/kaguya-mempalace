@@ -378,6 +378,11 @@
     return stripped;
   }
 
+  function dataIdToApiWingKey(dataId) {
+    if (dataId === 'chats') return 'chats';
+    return 'wing_' + dataId;
+  }
+
   // 简短 wing 名(用于 drawer path 前缀)
   function wingShortName(apiKey) {
     return apiWingIdToDataId(apiKey);
@@ -457,9 +462,9 @@
     showLoading(container, 'Loading stats…');
     try {
       const [ov, wingsData, tax] = await Promise.all([
-        window.KaguyaAPI.getOverview(),
-        window.KaguyaAPI.getWings(),
-        window.KaguyaAPI.getTaxonomy(),
+        window.KaguyaAPI.getOverview().catch(() => ({})),
+        window.KaguyaAPI.getWings().catch(() => ({})),
+        window.KaguyaAPI.getTaxonomy().catch(() => ({})),
       ]);
 
       const wingsMap = normalizeWingsMap(wingsData);
@@ -530,35 +535,40 @@
 
     try {
       const [wingsData, tax] = await Promise.all([
-        window.KaguyaAPI.getWings(),
-        window.KaguyaAPI.getTaxonomy(),
+        window.KaguyaAPI.getWings().catch(() => ({})),
+        window.KaguyaAPI.getTaxonomy().catch(() => ({})),
       ]);
 
       const wingsMap = normalizeWingsMap(wingsData);
       const taxonomy = (tax && tax.taxonomy) || {};
 
-      const entries = Object.keys(wingsMap).map((apiKey) => {
+      // gamma: iterate data.js wings as architecture source of truth
+      const allWings = (window.KAGUYA && window.KAGUYA.wings) || [];
+      const entries = allWings.map((wingCfg) => {
+        const apiKey = dataIdToApiWingKey(wingCfg.id);
         const drawerCount = Number(wingsMap[apiKey] || 0);
-        const dataId = apiWingIdToDataId(apiKey);
-        const meta = lookupWingMeta(dataId);
+        const meta = lookupWingMeta(wingCfg.id);
         const roomList = normalizeRoomsFor(taxonomy[apiKey]);
         const rooms = roomList.map((r) => r.name);
         return {
-          apiKey, dataId, drawerCount,
-          name: meta.name || dataId,
+          apiKey, dataId: wingCfg.id, drawerCount,
+          name: meta.name || wingCfg.id,
           jp: meta.jp || '',
           code: meta.code || '',
           rooms,
           roomCount: rooms.length,
+          isArchive: !!wingCfg.archive,
         };
       });
 
       const main = entries
-        .filter((e) => e.apiKey !== 'chats' && e.drawerCount >= 2)
+        .filter((e) => !e.isArchive && e.drawerCount >= 2)
         .sort((a, b) => b.drawerCount - a.drawerCount);
       const sparse = entries
-        .filter((e) => e.apiKey !== 'chats' && e.drawerCount === 1);
-      const archive = entries.find((e) => e.apiKey === 'chats');
+        .filter((e) => !e.isArchive && e.drawerCount === 1);
+      const dormant = entries
+        .filter((e) => !e.isArchive && e.drawerCount === 0);
+      const archive = entries.find((e) => e.isArchive);
 
       const maxMainCount = main.reduce((m, e) => Math.max(m, e.drawerCount), 0) || 1;
 
@@ -584,7 +594,26 @@
             <div class="wing-heat"><span style="width:${heatPct}%"></span></div>
           </a>
         `;
-      }).join('') || '<div style="color:var(--text-3);font-size:12px;padding:20px;">暂无 wing</div>';
+      }).join('');
+      if (!mapGrid.innerHTML && dormant.length) {
+        mapGrid.innerHTML = dormant.map((e) => {
+          const jpCode = [e.jp, e.code].filter(Boolean).map(esc).join(' \u00b7 ');
+          return `
+            <a class="wing" href="wings.html#\${esc(e.dataId)}" style="opacity:0.45">
+              <div class="wing-name">\${esc(e.name)}</div>
+              <div class="wing-jp">\${jpCode}</div>
+              <div class="wing-rooms"><span class="rm" style="font-style:italic">awaiting</span></div>
+              <div class="wing-stats">
+                <span><span class="n">0</span><span class="k">rm</span></span>
+                <span><span class="n">0</span><span class="k">dr</span></span>
+              </div>
+              <div class="wing-heat"><span style="width:0%"></span></div>
+            </a>
+          `;
+        }).join('');
+      } else if (!mapGrid.innerHTML) {
+        mapGrid.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:20px;">暂无 wing</div>';
+      }
 
       // sparse
       if (sparseLabel) {
