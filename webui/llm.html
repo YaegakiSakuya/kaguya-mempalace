@@ -711,20 +711,12 @@
     const p = (llmConfig.providers || []).find(x => x.id === providerId);
     if (!p) return;
 
-    const body = document.createElement('div');
-    const pingStatus = pingedOk
-      ? '<div style="color:var(--success);font-size:12px;margin-top:8px;">● 已 ping 通过, 可以安全切换</div>'
-      : '<div style="color:var(--camellia-text);font-size:12px;margin-top:8px;">⚠ 未经 ping 测试, 建议先 ping 再切换</div>';
-    body.innerHTML = `
-      <div class="kg-modal-confirm-text">
-        切换 active 到 <span style="color:var(--text);">${esc(p.name)} · ${esc(model)}</span>?
-        <span class="warn">kaguya-mempalace 下一次 LLM 调用会立即使用新配置。</span>
-        ${pingStatus}
-      </div>
-    `;
-    const errBanner = document.createElement('div');
-    body.appendChild(errBanner);
-    const showErr = (msg) => { errBanner.innerHTML = `<div class="kg-modal-error">${esc(msg)}</div>`; };
+    // showErr queries the live modal for a fresh error slot — survives KaguyaModal.update()
+    // which swaps the body DOM and would otherwise detach any captured errBanner reference.
+    const showErr = (msg) => {
+      const slot = document.querySelector('.kg-modal-card .kg-modal-body .kg-modal-error-slot');
+      if (slot) slot.innerHTML = `<div class="kg-modal-error">${esc(msg)}</div>`;
+    };
 
     const doSwitch = async () => {
       try {
@@ -736,6 +728,19 @@
       }
     };
 
+    const stage1Body = document.createElement('div');
+    const pingStatus = pingedOk
+      ? '<div style="color:var(--success);font-size:12px;margin-top:8px;">● 已 ping 通过, 可以安全切换</div>'
+      : '<div style="color:var(--camellia-text);font-size:12px;margin-top:8px;">⚠ 未经 ping 测试, 建议先 ping 再切换</div>';
+    stage1Body.innerHTML = `
+      <div class="kg-modal-confirm-text">
+        切换 active 到 <span style="color:var(--text);">${esc(p.name)} · ${esc(model)}</span>?
+        <span class="warn">kaguya-mempalace 下一次 LLM 调用会立即使用新配置。</span>
+        ${pingStatus}
+      </div>
+      <div class="kg-modal-error-slot"></div>
+    `;
+
     const actions = pingedOk
       ? [
           { label: '取消', variant: 'ghost', onClick: () => window.KaguyaModal.close() },
@@ -744,8 +749,13 @@
       : [
           { label: '取消', variant: 'ghost', onClick: () => window.KaguyaModal.close() },
           { label: '强制切换', variant: 'danger', onClick: () => {
+            const stage2Body = document.createElement('div');
+            stage2Body.innerHTML = `
+              <div class="kg-modal-confirm-text">未经 ping 测试, 确定继续?<span class="warn">若 provider/model 配置错误, gateway 会在下次调用时报错直到你切回正确配置。</span></div>
+              <div class="kg-modal-error-slot"></div>
+            `;
             window.KaguyaModal.update({
-              body: `<div class="kg-modal-confirm-text">未经 ping 测试, 确定继续?<span class="warn">若 provider/model 配置错误, gateway 会在下次调用时报错直到你切回正确配置。</span></div>`,
+              body: stage2Body,
               actions: [
                 { label: '返回', variant: 'ghost', onClick: () => openSetActiveModal(providerId, model, false) },
                 { label: '我确定, 切换', variant: 'danger', onClick: doSwitch },
@@ -757,7 +767,7 @@
     window.KaguyaModal.open({
       title: '切换 Active',
       subtitle: 'SET ACTIVE PROVIDER · MODEL',
-      body: body,
+      body: stage1Body,
       actions: actions,
     });
   }
