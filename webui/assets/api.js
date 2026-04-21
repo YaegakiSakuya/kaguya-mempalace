@@ -122,6 +122,12 @@ window.KaguyaAPI = (function () {
     return apiFetch('/graph/tunnels/list' + buildQuery({ wing }));
   }
 
+  // ----- llm config -----
+
+  async function getLlmConfig() {
+    return apiFetch('/llm/config');
+  }
+
   // ----- diary / usage / tools / turns -----
 
   async function getDiary() {
@@ -201,6 +207,7 @@ window.KaguyaAPI = (function () {
     getGraphNodes,
     getGraphTunnels,
     getAllTunnels,
+    getLlmConfig,
     getDiary,
     getUsage,
     getToolCalls,
