@@ -12,7 +12,6 @@ window.KAGUYA = (function () {
     { id: 'DAILY',      name: 'daily',      jp: '日々', code: 'W-05', rooms: [], drawers: 0 },
     { id: 'WORK',       name: 'work',       jp: '工房', code: 'W-06', rooms: [], drawers: 0 },
     { id: 'REFLECTION', name: 'reflection', jp: '内省', code: 'W-07', rooms: [], drawers: 0 },
-    { id: 'chats',      name: 'chats',      jp: '対話', code: 'SYS',  rooms: [], drawers: 0, archive: true },
   ];
 
   const nav = [
