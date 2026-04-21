@@ -405,6 +405,7 @@ webui/
 - **webui 的数据真实性 vs 视觉占位**:某些字段 API 无对应数据(比如 drawer 的 "rev N"、wing 的 triples/tunnels stat),前端现在用 `—` 占位或直接省略。**不要为了美观而伪造数字**——朔夜看一眼就能识破。
 - **drawer 没有独立 title 字段**:前端各页展示的 "drawer 标题" 是用 `content_preview` 前 40 字截断伪造的。这是 mempalace 设计层面的事实,不是 bug。如果要让 drawer 有清晰身份,应该在 mempalace 包层面给 drawer 加 `topic` 字段(和 diary 一样),这是独立立项,不要在 webui 前端堆补丁掩盖。
 - **drawer 删除是硬删**:调 `mempalace_delete_drawer` handler 会永久移除 chroma 向量和 sqlite metadata,无软删除层。webui 靠前端 confirm-delete 态做误触保护,不要绕过它。如果未来要软删除,应该改 mempalace 包语义,而不是在 webui 前端搞 trash bin。
+- **ad-hoc 调 mempalace handler 必须显式设 `MEMPALACE_PALACE_PATH`**:mempalace 包默认读写 `~/.mempalace/`(单机无项目语义时的 fallback),而本项目的真实宫殿在 `runtime/palace/`(由 inspector 在请求时通过 `os.environ["MEMPALACE_PALACE_PATH"] = settings.palace_path` 注入)。任何脱离 inspector 请求上下文的一次性 python 调用或 shell 脚本,必须在命令前显式 `MEMPALACE_PALACE_PATH=/home/ubuntu/apps/kaguya-mempalace/runtime/palace` 否则写入会落到 `~/.mempalace/`,而 inspector 根本看不见。这是生产数据和开发痕迹分离的物理边界,不是 bug。
 
 ### 运行时特性
 
