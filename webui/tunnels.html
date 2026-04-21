@@ -199,5 +199,197 @@
 </div>
 <script src="assets/data.js"></script>
 <script src="assets/shell.js"></script>
+<script src="assets/api.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const esc = window.KaguyaAPI.escapeHtml;
+  const truncate = window.KaguyaAPI.truncate;
+
+  function simplifyWingName(wing) {
+    return String(wing || '').replace(/^wing_/, '').replace(/_/g, ' ');
+  }
+
+  function renderPageHead(tunnels) {
+    const head = document.querySelector('.page-head');
+    if (!head) return;
+
+    const totalTunnels = tunnels.length;
+    const involvedWings = new Set();
+    tunnels.forEach((t) => {
+      if (t && t.from && t.from.wing) involvedWings.add(t.from.wing);
+      if (t && t.to && t.to.wing) involvedWings.add(t.to.wing);
+    });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const activeToday = tunnels.filter((t) => {
+      const stamp = String((t && (t.created_at || t.last_active)) || '');
+      return stamp.startsWith(today);
+    }).length;
+
+    const wingsCount = involvedWings.size;
+    const subText = totalTunnels === 0
+      ? '还没有 tunnel 被创建。yue 在 mempalace 里 weave 第一条之后，这里会自动点亮。'
+      : 'manual + auto tunnel 共存。点任一条查看两端 drawer 原文。';
+
+    head.innerHTML = `
+      <div>
+        <div class="eyebrow">Tunnels · 跨翼连接</div>
+        <h1 class="page-title">${totalTunnels} 条 tunnel，<span class="em">连接 ${wingsCount} 个 wing。</span></h1>
+        <p class="page-sub">${esc(subText)}</p>
+      </div>
+      <div class="page-head-right">
+        <div class="big">${totalTunnels}</div>
+        <div>TUNNELS · ${wingsCount} WINGS</div>
+        <div class="accent">${activeToday} ACTIVE TODAY</div>
+      </div>
+    `;
+  }
+
+  function renderSankey(tunnels) {
+    const svg = document.querySelector('.tunnel-viz svg');
+    if (!svg) return;
+
+    if (tunnels.length === 0) {
+      svg.innerHTML = `
+        <text x="550" y="180" text-anchor="middle" fill="var(--text-3)" style="font-family:var(--mono);font-size:13px;letter-spacing:0.16em;">
+          NO TUNNELS YET
+        </text>
+        <text x="550" y="210" text-anchor="middle" fill="var(--text-3)" style="font-family:var(--serif);font-size:12px;">
+          在 mempalace 里 weave 第一条 tunnel，Sankey 会从这里升起来
+        </text>
+      `;
+      return;
+    }
+
+    const outDeg = new Map();
+    const inDeg = new Map();
+    tunnels.forEach((t) => {
+      const src = (t && t.from && t.from.wing) || '';
+      const dst = (t && t.to && t.to.wing) || '';
+      if (src) outDeg.set(src, (outDeg.get(src) || 0) + 1);
+      if (dst) inDeg.set(dst, (inDeg.get(dst) || 0) + 1);
+    });
+
+    const leftWings = Array.from(outDeg.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const rightWings = Array.from(inDeg.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    const leftMax = leftWings.length ? Math.max.apply(null, leftWings.map((x) => x[1])) : 1;
+    const rightMax = rightWings.length ? Math.max.apply(null, rightWings.map((x) => x[1])) : 1;
+
+    const bars = [];
+    leftWings.forEach(([wing, cnt], i) => {
+      const y = 30 + i * 70;
+      const h = Math.max(20, 60 * cnt / leftMax);
+      bars.push(
+        `<rect x="60" y="${y}" width="6" height="${h.toFixed(1)}" class="tunnel-wing-bar"/>`
+        + `<text x="74" y="${y + 14}" class="tunnel-wing-label${i === 0 ? ' active' : ''}">${esc(simplifyWingName(wing))}</text>`
+        + `<text x="74" y="${y + 30}" class="tunnel-wing-count">${cnt} tunnel${cnt > 1 ? 's' : ''}</text>`
+      );
+    });
+    rightWings.forEach(([wing, cnt], i) => {
+      const y = 30 + i * 70;
+      const h = Math.max(20, 60 * cnt / rightMax);
+      bars.push(
+        `<rect x="1034" y="${y}" width="6" height="${h.toFixed(1)}" class="tunnel-wing-bar"/>`
+        + `<text x="1022" y="${y + 14}" class="tunnel-wing-label${i === 0 ? ' active' : ''}" text-anchor="end">${esc(simplifyWingName(wing))}</text>`
+        + `<text x="1022" y="${y + 30}" class="tunnel-wing-count" text-anchor="end">${cnt} tunnel${cnt > 1 ? 's' : ''}</text>`
+      );
+    });
+
+    bars.push(
+      `<text x="68" y="348" class="tunnel-wing-count">SOURCE</text>`
+      + `<text x="1030" y="348" class="tunnel-wing-count" text-anchor="end">DESTINATION</text>`
+    );
+
+    svg.innerHTML = `<g>${bars.join('')}</g>`;
+  }
+
+  function renderTunnelList(tunnels) {
+    const list = document.querySelector('.t-list');
+    if (!list) return;
+
+    if (tunnels.length === 0) {
+      list.innerHTML = `
+        <div style="padding:40px;text-align:center;color:var(--text-3);font-size:13px;">
+          暂无 tunnel。在 mempalace 里用 mempalace_create_tunnel 创建第一条。
+        </div>
+      `;
+      return;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    const html = tunnels.map((t) => {
+      const from = (t && t.from) || {};
+      const to = (t && t.to) || {};
+      const fromWing = from.wing || '';
+      const fromRoom = from.room || '';
+      const fromExcerpt = t.from_excerpt || from.excerpt || '';
+      const toWing = to.wing || '';
+      const toRoom = to.room || '';
+      const toExcerpt = t.to_excerpt || to.excerpt || '';
+      const predicate = t.predicate || t.relation || 'links';
+      const note = t.note || t.source || 'manual';
+      const createdAt = String(t.created_at || t.date || '');
+      const shortDate = createdAt.slice(5, 10);
+      const refCount = t.refs || t.weight || 1;
+      const isActive = createdAt.slice(0, 10) === today;
+
+      return `
+        <div class="t-card">
+          <div class="t-side">
+            <span class="t-wing">${esc(simplifyWingName(fromWing))}</span>
+            <span class="t-path">${esc(fromRoom)}</span>
+            <span class="t-excerpt">${esc(truncate(fromExcerpt, 80)) || '—'}</span>
+          </div>
+          <div class="t-link">
+            <span class="pred">${esc(predicate)}</span>
+            <span class="arrow"><span class="cap filled"></span><span class="ln"></span><span class="cap"></span></span>
+            <span class="meta">${esc(note)}${shortDate ? ' · ' + esc(shortDate) : ''}</span>
+          </div>
+          <div class="t-side right">
+            <span class="t-wing">${esc(simplifyWingName(toWing))}</span>
+            <span class="t-path">${esc(toRoom)}</span>
+            <span class="t-excerpt">${esc(truncate(toExcerpt, 80)) || '—'}</span>
+          </div>
+          <div class="t-meta">
+            <span class="refs">${esc(String(refCount))}</span>
+            <div>refs</div>
+            ${isActive ? '<div style="color:var(--camellia-text);margin-top:4px;">● ACTIVE</div>' : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    list.innerHTML = html;
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    try {
+      const resp = await window.KaguyaAPI.getAllTunnels();
+      const tunnels = Array.isArray(resp)
+        ? resp
+        : (resp && Array.isArray(resp.tunnels) ? resp.tunnels : []);
+
+      renderPageHead(tunnels);
+      renderSankey(tunnels);
+      renderTunnelList(tunnels);
+    } catch (err) {
+      console.error('tunnels page init failed:', err);
+      renderPageHead([]);
+      const svg = document.querySelector('.tunnel-viz svg');
+      if (svg) {
+        svg.innerHTML = `<text x="550" y="180" text-anchor="middle" fill="var(--camellia-text)" style="font-family:var(--mono);font-size:12px;">加载失败: ${esc(err && err.message ? err.message : String(err))}</text>`;
+      }
+      const list = document.querySelector('.t-list');
+      if (list) {
+        list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--camellia-text);font-size:13px;">加载失败: ${esc(err && err.message ? err.message : String(err))}</div>`;
+      }
+    }
+  });
+})();
+</script>
 </body>
 </html>
