@@ -138,13 +138,23 @@ async def run_autosave(application: Application, settings: Settings, chat_id: st
                 )
                 _write_turn_summary(settings.logs_dir, checkpoint_result, "checkpoint", chat_id)
 
-            await asyncio.to_thread(mine_conversations, settings)
-            await asyncio.to_thread(refresh_wakeup, settings)
-            await asyncio.to_thread(reset_message_count, settings.state_dir, chat_id)
+            try:
+                await asyncio.to_thread(mine_conversations, settings)
+            except Exception:
+                logger.exception("mine_conversations failed for chat_id=%s (non-fatal)", chat_id)
+            try:
+                await asyncio.to_thread(refresh_wakeup, settings)
+            except Exception:
+                logger.exception("refresh_wakeup failed for chat_id=%s (non-fatal)", chat_id)
 
             logger.info("autosave finished for chat_id=%s", chat_id)
         except Exception:
             logger.exception("autosave failed for chat_id=%s", chat_id)
+        finally:
+            try:
+                await asyncio.to_thread(reset_message_count, settings.state_dir, chat_id)
+            except Exception:
+                logger.exception("reset_message_count failed for chat_id=%s", chat_id)
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -281,7 +291,7 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             force_status_bootstrap,
         )
 
-        if count >= settings.autosave_user_message_interval:
+        if count == settings.autosave_user_message_interval:
             context.application.create_task(run_autosave(context.application, settings, chat_id))
 
     except Exception:
@@ -448,7 +458,7 @@ async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             force_status_bootstrap,
         )
 
-        if count >= settings.autosave_user_message_interval:
+        if count == settings.autosave_user_message_interval:
             context.application.create_task(run_autosave(context.application, settings, chat_id))
 
     except Exception:
