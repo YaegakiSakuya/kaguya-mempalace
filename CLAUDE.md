@@ -376,6 +376,22 @@ webui/
 - **二次确认**在前端 UI 层做(删除的 confirm-delete 态),防止误触,不是鉴权
 - 如果未来要分权(读/写/管理员三档),需要在 nginx 层按 location 挂不同 `.htpasswd` 文件,或 inspector 端扩展 scope
 
+### LLM config 后端写端点
+
+- **端点**:`POST/PATCH/DELETE /api/llm/providers[/{id}]` + `POST /api/llm/active` + `POST /api/llm/providers/{id}/models` + `POST /api/llm/providers/{id}/ping`,直接调 `app.core.runtime_config.*` 底层函数
+- **与 miniapp 两条并行链路**:miniapp 在 `/miniapp/config/*` 走 Telegram initData 鉴权;webui 在 `/api/llm/*` 走 Basic Auth。两者共享 process-global `runtime_config` 单例
+- **API key 语义**:新建必填;PATCH 时空字符串或缺省 = 不改,非空 = rotate。所有响应里 api_key 已脱敏
+- **set-active 立即生效**:`app/llm/client.py::chat` 每次请求都从 `runtime_config.get_active_client_config()` 拿配置,set_active 落盘后下一次 LLM 请求立即切换,无需重启 gateway
+- **active provider 不可删除**:`runtime_config.delete_provider` 对 active 抛 ValueError,API 返回 409
+- **Ping 永远返回 200**:失败情况 `{ok: false, error}`,便于前端统一处理,不和 4xx/5xx 混淆
+- **前端入口待接**:`webui/llm.html` 的 UI 改造在独立的下一个 PR 做
+
+### Runtime config 边界
+
+- **`app/core/runtime_config.py` 是 process-global 单例**:miniapp 和 inspector 共享同一份状态,任一 writer 落盘 → `{state_dir}/llm_config.json` → 所有 reader 立即生效
+- **不要复用 miniapp 的 config_routes router**:鉴权不同,错误形状不同。两条链路并行,共享底层模块
+- **可以 import miniapp 的纯工具函数**:`_fetch_models` 和 `_validate_base_url` 没有外部状态,webui 侧复用它们避免重复代码
+
 ---
 
 ## Critical Gotchas
@@ -393,6 +409,7 @@ webui/
 - **已激活的 MiniMax voice_id**：`kaguya_ja_v1` 已经付过 9.9 元音色解锁费，永久属于本账号。如果被从 MiniMax 删除（比如误调用 delete voice），需要重新克隆 + 再付一次解锁费。**不要去 MiniMax 后台的"声音管理"页面 touch 已激活的音色**。
 - **nginx `/etc/nginx/.htpasswd_palace` 和 `/etc/nginx/snippets/inspector_bearer.conf`**:webui Basic Auth + Bearer 覆写的两个凭据文件。**不进 git**。轮换密码时走 `sudo htpasswd -b /etc/nginx/.htpasswd_palace kaguya <new_pw>` + `sudo systemctl reload nginx`。不要手写 file 覆盖。
 - **`ops/` 和 `runtime/` 下的实际数据**:ops 是 AI 身份,runtime 是宫殿内容(drawers/KG/diary)。任何自动化清理操作之前必须 `git stash` 或明确备份。
+- **`app/core/runtime_config.py` 的 writer 语义**:`add_provider` / `update_provider` / `delete_provider` / `set_active` / `update_models_cache` 五个写函数是唯一合法入口,受 `threading.RLock` 保护,原子落盘。webui 和 miniapp 两套端点都调它们。**不要绕过它们直接改 `llm_config.json` 文件**,也不要在 inspector 或 miniapp 层再加一份独立锁。
 
 ### 谨慎修改的东西
 

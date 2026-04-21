@@ -781,3 +781,78 @@ html { scroll-behavior: smooth; }
   color: var(--camellia-text); font-family: var(--mono); font-size: 11px;
   display: block; margin-top: 6px; letter-spacing: 0.08em;
 }
+
+/* ---------- Password toggle field (for API key input in modal) ---------- */
+.kg-password-field {
+  position: relative;
+  display: flex; align-items: stretch;
+  background: var(--bg);
+  border: 1px solid var(--border-mid);
+  border-radius: 3px;
+  transition: border-color 160ms var(--ease);
+}
+.kg-password-field:focus-within { border-color: var(--camellia-dark); }
+.kg-password-field input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text); padding: 9px 11px;
+  font-family: var(--mono); font-size: 12px; line-height: 1.5;
+}
+.kg-password-field .kg-pw-toggle {
+  background: transparent; border: none; border-left: 1px solid var(--border);
+  color: var(--text-3); padding: 0 12px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+  cursor: pointer;
+  transition: color 160ms var(--ease);
+}
+.kg-password-field .kg-pw-toggle:hover { color: var(--text); }
+
+/* ---------- Inline action tray (under model chips) ---------- */
+.kg-action-tray {
+  display: flex; gap: 8px;
+  padding: 8px 12px;
+  background: var(--hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  margin-top: 6px; margin-bottom: 8px;
+  font-size: 11px;
+}
+.kg-action-tray button {
+  background: transparent; border: 1px solid var(--border-mid);
+  color: var(--text-2); padding: 5px 12px; border-radius: 2px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+  cursor: pointer;
+  transition: color 160ms var(--ease), border-color 160ms var(--ease);
+}
+.kg-action-tray button:hover {
+  color: var(--text); border-color: var(--border-strong);
+}
+.kg-action-tray button.primary {
+  border-color: var(--camellia-dark); color: var(--camellia-text);
+}
+.kg-action-tray button.primary:hover {
+  border-color: var(--camellia); color: var(--text);
+  background: rgba(184,77,90,0.08);
+}
+
+/* ---------- Ping result pill ---------- */
+.kg-ping-result {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 2px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em;
+}
+.kg-ping-result.ok {
+  color: var(--success);
+  background: rgba(122,155,126,0.08);
+  border: 1px solid rgba(122,155,126,0.24);
+}
+.kg-ping-result.fail {
+  color: var(--camellia-text);
+  background: rgba(184,77,90,0.06);
+  border: 1px solid rgba(184,77,90,0.24);
+}
+
+/* ---------- button :disabled state (additive) ---------- */
+.btn:disabled, .btn[aria-disabled="true"] {
+  opacity: 0.4; cursor: not-allowed;
+  pointer-events: none;
+}
