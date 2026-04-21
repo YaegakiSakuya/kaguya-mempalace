@@ -286,6 +286,21 @@ webui/
     └── shell.css     # 共享 design tokens + 所有页面共用的 class 定义
 ```
 
+### Wing taxonomy (current)
+
+Palace 当前采用 7 定制 wing + 1 归档 wing 的架构。`webui/assets/data.js` 的 wings 数组是视觉层静态 metadata。真实 wing 数据由 palace 的 chroma metadata 决定,API `/api/wings` 实时返回。fallback 机制:API 返回的 wing 若不在 data.js 里,使用 wing id 作为 displayName 兜底。
+
+| wing | jp | scope |
+|---|---|---|
+| US | 吾々 | 朔和辉夜的关系核心命题 |
+| CREATIVE | 創作 | 神楽及其他创作产出 |
+| PHILOSOPHY | 思索 | 持续性思辨 |
+| BODY | 身体 | 身体、感官、情欲 |
+| DAILY | 日々 | 日常生活 |
+| WORK | 工房 | 工程与基础设施 |
+| REFLECTION | 内省 | 元意识、diary、反思 |
+| chats | 対話 | 系统归档(mempalace miner 原始入库) |
+
 ### 前端架构约束
 
 - **不引入任何框架**:纯原生 ES + IIFE 包装 + `window.XXX` 全局
