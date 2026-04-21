@@ -13,11 +13,19 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel
+from typing import Optional
 
 from app.core.config import Settings
 from app.inspector.logger import read_jsonl_tail
 from app.miniapp.auth import verify_init_data_raw, verify_telegram_init_data
 from app.miniapp.sse import sse_manager
+
+
+class DrawerUpdateIn(BaseModel):
+    content: Optional[str] = None
+    wing: Optional[str] = None
+    room: Optional[str] = None
 
 logger = logging.getLogger(__name__)
 
@@ -271,6 +279,31 @@ def create_inspector_app(settings: Settings) -> FastAPI:
             })
 
         return results
+
+    @app.put("/api/drawers/{drawer_id}", dependencies=[Depends(auth)])
+    async def update_drawer_endpoint(drawer_id: str, body: DrawerUpdateIn):
+        try:
+            from mempalace.mcp_server import TOOLS
+            handler = TOOLS["mempalace_update_drawer"]["handler"]
+            result = handler(
+                drawer_id=drawer_id,
+                content=body.content,
+                wing=body.wing,
+                room=body.room,
+            )
+            return _parse_tool_result(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    @app.delete("/api/drawers/{drawer_id}", dependencies=[Depends(auth)])
+    async def delete_drawer_endpoint(drawer_id: str):
+        try:
+            from mempalace.mcp_server import TOOLS
+            handler = TOOLS["mempalace_delete_drawer"]["handler"]
+            result = handler(drawer_id=drawer_id)
+            return _parse_tool_result(result)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
 
     # ----- Search -----
 

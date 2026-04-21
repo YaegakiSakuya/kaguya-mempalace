@@ -375,12 +375,18 @@
     return html;
   }
 
-  async function loadWingDetail(apiKey) {
+  async function loadWingDetail(apiKey, opts) {
+    opts = opts || {};
+    const preserveScroll = !!opts.preserveScroll;
     const token = ++loadToken;
     currentWingKey = apiKey;
     const section = document.querySelector('.wings-layout > section');
     if (!section) return;
-    section.innerHTML = '<div style="padding:40px;color:var(--text-3);font-size:13px;">Loading wing…</div>';
+
+    const savedScroll = preserveScroll ? window.scrollY : 0;
+    if (!preserveScroll) {
+      section.innerHTML = '<div style="padding:40px;color:var(--text-3);font-size:13px;">Loading wing…</div>';
+    }
 
     try {
       let drawers = drawerCache.get(apiKey);
@@ -392,11 +398,23 @@
       if (token !== loadToken) return;
       section.innerHTML = renderWingDetailHtml(apiKey, drawers || []);
       updateActiveWingInSidebar(apiKey);
+      if (preserveScroll) {
+        requestAnimationFrame(() => window.scrollTo(0, savedScroll));
+      }
     } catch (err) {
       if (token !== loadToken) return;
       console.error('loadWingDetail failed:', err);
       section.innerHTML = `<div style="padding:40px;color:var(--camellia-text);">加载失败: ${esc(err && err.message ? err.message : String(err))}</div>`;
     }
+  }
+
+  function invalidateWingsAndRefresh(editedWings) {
+    const set = new Set((editedWings || []).filter(Boolean));
+    set.forEach((w) => drawerCache.delete(w));
+    if (currentWingKey && set.has(currentWingKey)) {
+      return loadWingDetail(currentWingKey, { preserveScroll: true });
+    }
+    return Promise.resolve();
   }
 
   function pickInitialWing() {
@@ -426,28 +444,224 @@
     if (!drawer) return;
     const meta = drawer.metadata || {};
     const preview = drawer.content_preview || '';
-    const full = drawer.content_full || preview;
+    const fullInitial = drawer.content_full || preview;
     const title = truncate(preview, 40) || '(untitled drawer)';
     const subParts = [];
     if (meta.wing) subParts.push(meta.wing);
     if (meta.room) subParts.push(meta.room);
     const subtitle = subParts.join(' · ');
 
-    const metaRows = [
-      ['ID', drawer.id || '—'],
-      ['Wing', meta.wing || '—'],
-      ['Room', meta.room || '—'],
-      ['Filed', meta.filed_at || '—'],
-      ['Chunk', (meta.chunk_index !== undefined && meta.chunk_index !== null) ? String(meta.chunk_index) : '—'],
-      ['Added by', meta.added_by || '—'],
-    ].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+    // Captured at modal open; do not read currentWingKey after an awaited call.
+    const originalWingKey = meta.wing || currentWingKey;
+    // Flipped by onClose (any close path). Every async callback that touches
+    // modal DOM or calls KaguyaModal.* must guard on this — otherwise a
+    // late-arriving response could mutate a subsequently-opened modal.
+    let modalActive = true;
 
-    const body = `
-      <dl class="kg-modal-metagrid">${metaRows}</dl>
-      <div class="kg-modal-fulltext">${esc(full)}</div>
-    `;
+    const snapshot = {
+      content: fullInitial,
+      wing: meta.wing || '',
+      room: meta.room || '',
+    };
 
-    window.KaguyaModal.open({ title, subtitle, body });
+    const editState = { content: snapshot.content, wing: snapshot.wing, room: snapshot.room, error: '', saving: false };
+
+    function renderViewBody() {
+      const metaRows = [
+        ['ID', drawer.id || '—'],
+        ['Wing', meta.wing || '—'],
+        ['Room', meta.room || '—'],
+        ['Filed', meta.filed_at || '—'],
+        ['Chunk', (meta.chunk_index !== undefined && meta.chunk_index !== null) ? String(meta.chunk_index) : '—'],
+        ['Added by', meta.added_by || '—'],
+      ].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+      return `
+        <dl class="kg-modal-metagrid">${metaRows}</dl>
+        <div class="kg-modal-fulltext">${esc(editState.content)}</div>
+      `;
+    }
+
+    function enterViewState() {
+      editState.error = '';
+      window.KaguyaModal.update({
+        body: renderViewBody(),
+        actions: [
+          { label: '删除', variant: 'danger', onClick: enterConfirmDeleteState },
+          { label: '编辑', variant: 'primary', onClick: enterEditState },
+        ],
+      });
+    }
+
+    function renderEditBody() {
+      const wingOptions = Object.keys(wingsMap()).map((key) => {
+        const dataId = apiWingIdToDataId(key);
+        const cfg = lookupWingConfig(dataId);
+        const display = (cfg && cfg.name) || dataId;
+        const sel = key === editState.wing ? ' selected' : '';
+        return `<option value="${esc(key)}"${sel}>${esc(display)} (${esc(key)})</option>`;
+      }).join('');
+
+      const errBlock = editState.error
+        ? `<div class="kg-modal-error">${esc(editState.error)}</div>`
+        : '';
+
+      return `
+        <form class="kg-modal-form" data-drawer-edit-form onsubmit="return false;">
+          <div class="kg-modal-field">
+            <label for="drawer-edit-content">Content</label>
+            <textarea id="drawer-edit-content" name="content">${esc(editState.content)}</textarea>
+          </div>
+          <div class="kg-modal-field">
+            <label for="drawer-edit-wing">Wing</label>
+            <select id="drawer-edit-wing" name="wing">${wingOptions}</select>
+          </div>
+          <div class="kg-modal-field">
+            <label for="drawer-edit-room">Room</label>
+            <input id="drawer-edit-room" name="room" type="text" value="${esc(editState.room)}" placeholder="自由文本,支持新建" />
+          </div>
+          ${errBlock}
+        </form>
+      `;
+    }
+
+    function wireEditInputs() {
+      const form = document.querySelector('.kg-modal-body [data-drawer-edit-form]');
+      if (!form) return;
+      const contentEl = form.querySelector('#drawer-edit-content');
+      const wingEl = form.querySelector('#drawer-edit-wing');
+      const roomEl = form.querySelector('#drawer-edit-room');
+      if (contentEl) contentEl.addEventListener('input', (e) => { editState.content = e.target.value; });
+      if (wingEl) wingEl.addEventListener('change', (e) => { editState.wing = e.target.value; });
+      if (roomEl) roomEl.addEventListener('input', (e) => { editState.room = e.target.value; });
+    }
+
+    function enterEditState() {
+      editState.error = '';
+      window.KaguyaModal.update({
+        body: renderEditBody(),
+        actions: [
+          { label: '取消', variant: 'ghost', onClick: enterViewState },
+          { label: '保存', variant: 'primary', onClick: handleSave },
+        ],
+      });
+      wireEditInputs();
+    }
+
+    function enterConfirmDeleteState() {
+      const bodyHtml = `
+        <div class="kg-modal-confirm-text">
+          确定要删除这个 drawer 吗？
+          <span class="warn">操作不可逆,向量和元数据会一并从宫殿中消失。</span>
+        </div>
+      `;
+      window.KaguyaModal.update({
+        body: bodyHtml,
+        actions: [
+          { label: '取消', variant: 'ghost', onClick: enterViewState },
+          { label: '确认删除', variant: 'danger', onClick: handleDelete },
+        ],
+      });
+    }
+
+    function buildPatch() {
+      const patch = {};
+      if (editState.content !== snapshot.content) patch.content = editState.content;
+      if (editState.wing !== snapshot.wing) patch.wing = editState.wing;
+      if (editState.room !== snapshot.room) patch.room = editState.room;
+      return patch;
+    }
+
+    function showEditError(msg) {
+      editState.error = msg || '操作失败';
+      const bodyEl = document.querySelector('.kg-modal-body');
+      if (!bodyEl) return;
+      const existing = bodyEl.querySelector('.kg-modal-error');
+      if (existing) existing.remove();
+      const form = bodyEl.querySelector('.kg-modal-form');
+      const err = document.createElement('div');
+      err.className = 'kg-modal-error';
+      err.textContent = editState.error;
+      if (form) form.appendChild(err); else bodyEl.appendChild(err);
+    }
+
+    async function handleSave() {
+      if (editState.saving || !modalActive) return;
+
+      if (typeof editState.content !== 'string' || editState.content.trim() === '') {
+        showEditError('Content 不能为空');
+        return;
+      }
+
+      const patch = buildPatch();
+      if (Object.keys(patch).length === 0) {
+        showEditError('无改动');
+        return;
+      }
+
+      editState.saving = true;
+      try {
+        const result = await window.KaguyaAPI.updateDrawer(drawer.id, patch);
+        const success = !(result && result.success === false);
+        if (success) {
+          // Always invalidate the affected wings, even if the user closed the
+          // originating modal mid-flight. Otherwise a cache stale to the real
+          // state survives.
+          const touched = [originalWingKey];
+          if (patch.wing && patch.wing !== originalWingKey) touched.push(patch.wing);
+          if (modalActive) window.KaguyaModal.close();
+          await invalidateWingsAndRefresh(touched);
+          return;
+        }
+        // success === false — show inline error only if originating modal
+        // is still on screen. If user navigated away, swallow silently.
+        if (modalActive) showEditError(result.error || '保存失败');
+      } catch (err) {
+        console.error('updateDrawer failed:', err);
+        if (modalActive) showEditError((err && err.message) ? err.message : String(err));
+      } finally {
+        editState.saving = false;
+      }
+    }
+
+    function showBodyError(msg) {
+      if (!modalActive) return;
+      const bodyEl = document.querySelector('.kg-modal-body');
+      if (!bodyEl) return;
+      const existing = bodyEl.querySelector('.kg-modal-error');
+      if (existing) existing.remove();
+      const err = document.createElement('div');
+      err.className = 'kg-modal-error';
+      err.textContent = msg;
+      bodyEl.appendChild(err);
+    }
+
+    async function handleDelete() {
+      if (!modalActive) return;
+      try {
+        const result = await window.KaguyaAPI.deleteDrawer(drawer.id);
+        const success = !(result && result.success === false);
+        if (success) {
+          if (modalActive) window.KaguyaModal.close();
+          await invalidateWingsAndRefresh([originalWingKey]);
+          return;
+        }
+        showBodyError(result.error || '删除失败');
+      } catch (err) {
+        console.error('deleteDrawer failed:', err);
+        showBodyError((err && err.message) ? err.message : String(err));
+      }
+    }
+
+    window.KaguyaModal.open({
+      title,
+      subtitle,
+      body: renderViewBody(),
+      actions: [
+        { label: '删除', variant: 'danger', onClick: enterConfirmDeleteState },
+        { label: '编辑', variant: 'primary', onClick: enterEditState },
+      ],
+      onClose: () => { modalActive = false; },
+    });
   }
 
   // ---------- init ----------

@@ -714,3 +714,70 @@ html { scroll-behavior: smooth; }
   margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border);
 }
 .kg-modal-actions:empty { display: none; }
+
+/* ---------- Button variants (additive to existing .btn) ---------- */
+.btn.danger {
+  border-color: var(--camellia-dark);
+  color: var(--camellia-text);
+}
+.btn.danger:hover {
+  border-color: var(--camellia);
+  color: var(--text);
+  background: rgba(184,77,90,0.12);
+}
+.btn.ghost {
+  border-color: transparent;
+  color: var(--text-3);
+}
+.btn.ghost:hover {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+
+/* ---------- Modal: editable form (edit state) ---------- */
+.kg-modal-form {
+  display: flex; flex-direction: column; gap: 14px;
+}
+.kg-modal-field {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.kg-modal-field label {
+  font-family: var(--mono); font-size: 10px; color: var(--text-3);
+  letter-spacing: 0.16em; text-transform: uppercase;
+}
+.kg-modal-field input,
+.kg-modal-field select,
+.kg-modal-field textarea {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border-mid); border-radius: 3px;
+  padding: 9px 11px;
+  font-family: var(--mono); font-size: 12px; line-height: 1.5;
+  transition: border-color 160ms var(--ease);
+}
+.kg-modal-field input:focus,
+.kg-modal-field select:focus,
+.kg-modal-field textarea:focus {
+  outline: none; border-color: var(--camellia-dark);
+}
+.kg-modal-field textarea {
+  font-family: var(--serif); font-size: 14px; line-height: 1.75;
+  min-height: 240px; resize: vertical;
+}
+
+/* ---------- Modal: inline error / confirmation banner ---------- */
+.kg-modal-error {
+  color: var(--camellia-text);
+  font-size: 12px; line-height: 1.6;
+  padding: 10px 12px;
+  background: rgba(184,77,90,0.06);
+  border-left: 2px solid var(--camellia);
+  margin-top: 8px;
+}
+.kg-modal-confirm-text {
+  color: var(--text); font-size: 14px; line-height: 1.7;
+  padding: 12px 0;
+}
+.kg-modal-confirm-text .warn {
+  color: var(--camellia-text); font-family: var(--mono); font-size: 11px;
+  display: block; margin-top: 6px; letter-spacing: 0.08em;
+}
