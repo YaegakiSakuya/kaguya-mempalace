@@ -267,6 +267,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/shell.js"></script>
 <script src="assets/api.js"></script>
+<script src="assets/modal.js"></script>
 <script>
 (function () {
   'use strict';
@@ -277,6 +278,7 @@
   let entitiesList = [];
   let currentEntity = null;
   const tripleCache = new Map();
+  const timelineCache = new Map();
   let kgStats = null;
 
   function renderStats() {
@@ -489,13 +491,17 @@
     `;
   }
 
+  // Keep in sync with openEntityModal so the modal can safely reuse this cache
+  // without under-reporting triples for entities already loaded by the rail.
+  const TRIPLE_FETCH_LIMIT = 100;
+
   async function loadEntityTriples(name) {
     const svg = document.querySelector('.kg-canvas svg');
     if (!svg) return;
     try {
       let triples = tripleCache.get(name);
       if (!triples) {
-        const resp = await window.KaguyaAPI.getKgTriples({ entity: name, limit: 50 });
+        const resp = await window.KaguyaAPI.getKgTriples({ entity: name, limit: TRIPLE_FETCH_LIMIT });
         triples = Array.isArray(resp) ? resp : (resp && resp.triples) || [];
         tripleCache.set(name, triples);
       }
@@ -515,6 +521,122 @@
       el.classList.toggle('active', el.dataset.entity === name);
     });
     loadEntityTriples(name);
+    openEntityModal(name);
+  }
+
+  // ---------- entity detail modal ----------
+  function tripleRowHtml(t) {
+    if (!t) return '';
+    const subj = t.subject || '';
+    const obj = t.object || '';
+    const pred = t.predicate || t.relation || '';
+    return `<div style="padding:9px 0;border-top:1px solid var(--border);font-family:var(--mono);font-size:11.5px;line-height:1.6;">`
+      + `<span style="color:var(--text)">${esc(truncate(subj, 22))}</span>`
+      + `<span style="color:var(--camellia-text);padding:0 6px">→ ${esc(truncate(pred, 22))}</span>`
+      + `<span style="color:var(--text-2)">${esc(truncate(obj, 28))}</span>`
+      + `</div>`;
+  }
+
+  function timelineRowHtml(ev) {
+    if (!ev) return '';
+    const date = ev.date || ev.timestamp || ev.filed_at || '';
+    const text = ev.event || ev.summary || ev.description || ev.content || '';
+    return `<div style="padding:9px 0;border-top:1px solid var(--border);font-size:12.5px;line-height:1.7;">`
+      + `<span style="font-family:var(--mono);font-size:10px;color:var(--text-3);letter-spacing:0.12em;margin-right:10px;">${esc(date)}</span>`
+      + `<span style="color:var(--text-2);">${esc(truncate(text, 180))}</span>`
+      + `</div>`;
+  }
+
+  function renderEntityModalBody(entity, triples, timeline, errors) {
+    const name = (entity && entity.name) || '';
+    const type = (entity && entity.type) || '—';
+
+    const metaRows = [
+      ['Name', name || '—'],
+      ['Type', type],
+    ].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+
+    const tripleList = Array.isArray(triples) ? triples : [];
+    const timelineList = Array.isArray(timeline) ? timeline : [];
+
+    let triplesSection;
+    if (errors && errors.triples) {
+      triplesSection = `<div style="color:var(--camellia-text);font-size:12px;padding:6px 0;">加载失败</div>`;
+    } else if (!tripleList.length) {
+      triplesSection = `<div style="color:var(--text-3);font-size:12px;padding:6px 0;">—</div>`;
+    } else {
+      triplesSection = tripleList.slice(0, 60).map(tripleRowHtml).join('');
+    }
+
+    let timelineSection;
+    if (errors && errors.timeline) {
+      timelineSection = `<div style="color:var(--camellia-text);font-size:12px;padding:6px 0;">加载失败</div>`;
+    } else if (!timelineList.length) {
+      timelineSection = `<div style="color:var(--text-3);font-size:12px;padding:6px 0;">—</div>`;
+    } else {
+      timelineSection = timelineList.slice(0, 40).map(timelineRowHtml).join('');
+    }
+
+    return `
+      <dl class="kg-modal-metagrid">${metaRows}</dl>
+      <div class="kg-modal-section">三元组 · ${tripleList.length} 条</div>
+      ${triplesSection}
+      <div class="kg-modal-section">时间线 · ${timelineList.length} 条</div>
+      ${timelineSection}
+    `;
+  }
+
+  async function openEntityModal(name) {
+    if (!name) return;
+    const entity = entitiesList.find((e) => e && e.name === name) || { name };
+    const type = entity.type || 'entity';
+
+    window.KaguyaModal.open({
+      title: name,
+      subtitle: String(type),
+      body: `<div style="color:var(--text-3);font-size:12px;padding:10px 0;">加载中…</div>`,
+    });
+
+    const errors = {};
+    const triplesPromise = (async () => {
+      if (tripleCache.has(name)) return tripleCache.get(name);
+      try {
+        const resp = await window.KaguyaAPI.getKgTriples({ entity: name, limit: TRIPLE_FETCH_LIMIT });
+        const list = Array.isArray(resp) ? resp : (resp && resp.triples) || [];
+        tripleCache.set(name, list);
+        return list;
+      } catch (err) {
+        console.error('kg triples failed:', err);
+        errors.triples = true;
+        return [];
+      }
+    })();
+    const timelinePromise = (async () => {
+      if (timelineCache.has(name)) return timelineCache.get(name);
+      try {
+        const resp = await window.KaguyaAPI.getKgTimeline({ entity: name });
+        const list = Array.isArray(resp)
+          ? resp
+          : (resp && Array.isArray(resp.timeline) ? resp.timeline
+             : (resp && Array.isArray(resp.events) ? resp.events : []));
+        timelineCache.set(name, list);
+        return list;
+      } catch (err) {
+        console.error('kg timeline failed:', err);
+        errors.timeline = true;
+        return [];
+      }
+    })();
+
+    const [triples, timeline] = await Promise.all([triplesPromise, timelinePromise]);
+
+    // If another modal was opened meanwhile, skip the update.
+    const openTitle = document.querySelector('.kg-modal-title');
+    if (!openTitle || openTitle.textContent !== name) return;
+    const bodyEl = document.querySelector('.kg-modal-body');
+    if (bodyEl) {
+      bodyEl.innerHTML = renderEntityModalBody(entity, triples, timeline, errors);
+    }
   }
 
   document.addEventListener('DOMContentLoaded', async () => {

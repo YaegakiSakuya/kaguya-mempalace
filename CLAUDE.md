@@ -345,6 +345,21 @@ webui/
 - **since 日期**: `palaceMeta.since = '2026.04.17'` 是情感锚点（项目所有者生日),不是宫殿技术初始化时间（那是 2026-04-09)。不要"订正"回技术日期。
 - **page-head 其他字段当前仍为占位**: "宫殿今日有 N 处改动" / "最后一次写入是 X 分钟前" / 右上角日期星期 / "▲ N writes today" 暂未接线真实数据,属独立待办,改动时请一并立项。
 
+### Modal 详情弹窗（共享组件）
+
+- **入口**: `webui/assets/modal.js` 的 `window.KaguyaModal.open({ title, subtitle, body, actions, onClose })`
+- **CSS 骨架**: `webui/assets/shell.css` 末尾的 `.kg-modal-*` 系列 class,严禁在 page-specific style 里覆盖
+- **单实例**: 一次只有一个 modal,新 open 会先 close 旧的
+- **关闭路径**: backdrop 点击 / ESC / 右上 × 按钮 / 主动 `close()` 调用
+- **已接入页面**: Wings (`.d-tile` click → drawer 详情), Graph (`.kg-entity` click → entity 详情聚合两个 KG 端点), Diary (`.drawer[data-diary-date]` click → diary 详情)
+- **actions 参数**: 当前三个弹窗都不传,预留给后续 drawer edit/delete PR 使用
+
+### Diary heatmap 联动
+
+- `#hm-grid` 每格带 `data-diary-date` 属性,点击后替换 Today 卡内容为该日 diary
+- 前端维护 `diaryByDate` 字典,仅展示已加载的 entry
+- Today 卡右上角 "today" 小链接可回到真实今日
+
 ---
 
 ## Critical Gotchas
