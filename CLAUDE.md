@@ -360,6 +360,22 @@ webui/
 - 前端维护 `diaryByDate` 字典,仅展示已加载的 entry
 - Today 卡右上角 "today" 小链接可回到真实今日
 
+### Drawer 写操作（Wings 页）
+
+- **入口**: Wings 页的 drawer modal(`.d-tile` 点击打开),底部 actions 有"编辑"和"删除"两个按钮
+- **三态切换**:view(只读展示) / edit(表单) / confirm-delete(内联二次确认),都在同一个 modal 内通过 `KaguyaModal.update()` 切换,不重开 modal
+- **保存语义**:前端做脏检查,只把改过的字段发给 `PUT /api/drawers/{id}`。未改字段不传,后端 handler 的 None sentinel 意为"保持原值"
+- **删除语义**:硬删不可逆,chroma 向量和 sqlite 元数据同时消失。必须点击"删除" → 确认页 → "确认删除"两步才触发
+- **刷新策略**:save/delete 成功后关 modal,局部刷新当前 wing/room 的 drawer 列表,严禁 `location.reload()`
+- **错误处理**:后端返回 `{success: false, error: "..."}` 时,edit 态在 modal 内联展示错误,不关闭;其他 HTTP 错误 console.error + modal 内错误横幅
+
+### Webui 写操作的鉴权边界
+
+- 当前 webui 所有写端点(`PUT /api/drawers/{id}` / `DELETE /api/drawers/{id}`)复用读端点的 Basic Auth + Bearer 翻译
+- **不做**二次鉴权层(密码确认 / OTP / 权限 scope),因为 Basic Auth 通过已经代表授权
+- **二次确认**在前端 UI 层做(删除的 confirm-delete 态),防止误触,不是鉴权
+- 如果未来要分权(读/写/管理员三档),需要在 nginx 层按 location 挂不同 `.htpasswd` 文件,或 inspector 端扩展 scope
+
 ---
 
 ## Critical Gotchas
@@ -388,6 +404,7 @@ webui/
 - **webui 是生产环境**:直接 push 到 main 会立即生效。大改动走 PR,一个 PR 一件事(CSS 调整 / 后端端点 / 前端接线各自独立 PR,方便回滚)。
 - **webui 的数据真实性 vs 视觉占位**:某些字段 API 无对应数据(比如 drawer 的 "rev N"、wing 的 triples/tunnels stat),前端现在用 `—` 占位或直接省略。**不要为了美观而伪造数字**——朔夜看一眼就能识破。
 - **drawer 没有独立 title 字段**:前端各页展示的 "drawer 标题" 是用 `content_preview` 前 40 字截断伪造的。这是 mempalace 设计层面的事实,不是 bug。如果要让 drawer 有清晰身份,应该在 mempalace 包层面给 drawer 加 `topic` 字段(和 diary 一样),这是独立立项,不要在 webui 前端堆补丁掩盖。
+- **drawer 删除是硬删**:调 `mempalace_delete_drawer` handler 会永久移除 chroma 向量和 sqlite metadata,无软删除层。webui 靠前端 confirm-delete 态做误触保护,不要绕过它。如果未来要软删除,应该改 mempalace 包语义,而不是在 webui 前端搞 trash bin。
 
 ### 运行时特性
 

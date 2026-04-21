@@ -5,6 +5,7 @@
  *
  * API:
  *   KaguyaModal.open({ title, subtitle, body, actions, onClose })
+ *   KaguyaModal.update({ body?, actions? })   // in-place swap, no reopen
  *   KaguyaModal.close()
  *
  *   body: string (inserted as-is, pre-escape yourself) or HTMLElement
@@ -27,6 +28,51 @@ window.KaguyaModal = (function () {
 
   let current = null; // { backdrop, onClose, keyHandler, prevOverflow }
   let pending = null; // a modal mid-close whose cleanup hasn't run yet
+
+  function renderActions(actionsEl, actions) {
+    actionsEl.innerHTML = '';
+    const list = Array.isArray(actions) ? actions : [];
+    list.forEach((a) => {
+      if (!a || typeof a.label !== 'string') return;
+      const btn = document.createElement('button');
+      let cls = 'btn';
+      if (a.variant === 'primary') cls += ' primary';
+      else if (a.variant === 'danger') cls += ' danger';
+      else if (a.variant === 'ghost') cls += ' ghost';
+      btn.className = cls;
+      btn.textContent = a.label;
+      if (typeof a.onClick === 'function') {
+        btn.addEventListener('click', (ev) => {
+          try { a.onClick(ev); } catch (err) { console.error('modal action threw:', err); }
+        });
+      }
+      actionsEl.appendChild(btn);
+    });
+  }
+
+  function update(opts) {
+    if (!current) return;
+    opts = opts || {};
+    const card = current.backdrop.querySelector('.kg-modal-card');
+    if (!card) return;
+
+    if (opts.body !== undefined) {
+      const bodyEl = card.querySelector('.kg-modal-body');
+      if (bodyEl) {
+        bodyEl.innerHTML = '';
+        if (opts.body instanceof HTMLElement) {
+          bodyEl.appendChild(opts.body);
+        } else if (typeof opts.body === 'string') {
+          bodyEl.innerHTML = opts.body;
+        }
+      }
+    }
+
+    if (opts.actions !== undefined) {
+      const actionsEl = card.querySelector('.kg-modal-actions');
+      if (actionsEl) renderActions(actionsEl, opts.actions);
+    }
+  }
 
   function close() {
     if (!current) return;
@@ -107,19 +153,7 @@ window.KaguyaModal = (function () {
 
     const actionsWrap = document.createElement('div');
     actionsWrap.className = 'kg-modal-actions';
-    const actions = Array.isArray(opts.actions) ? opts.actions : [];
-    actions.forEach((a) => {
-      if (!a || typeof a.label !== 'string') return;
-      const btn = document.createElement('button');
-      btn.className = 'btn' + (a.variant === 'primary' ? ' primary' : '');
-      btn.textContent = a.label;
-      if (typeof a.onClick === 'function') {
-        btn.addEventListener('click', (ev) => {
-          try { a.onClick(ev); } catch (err) { console.error('modal action threw:', err); }
-        });
-      }
-      actionsWrap.appendChild(btn);
-    });
+    renderActions(actionsWrap, opts.actions);
 
     card.appendChild(closeBtn);
     card.appendChild(head);
@@ -155,5 +189,5 @@ window.KaguyaModal = (function () {
     return { close };
   }
 
-  return { open, close };
+  return { open, update, close };
 })();

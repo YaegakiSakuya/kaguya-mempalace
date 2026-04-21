@@ -128,6 +128,29 @@ window.KaguyaAPI = (function () {
     return apiFetch('/llm/config');
   }
 
+  // ----- write operations (PUT / DELETE) -----
+
+  async function putJson(path, body) {
+    return apiFetch(path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+  }
+
+  async function deleteJson(path) {
+    return apiFetch(path, { method: 'DELETE' });
+  }
+
+  async function updateDrawer(drawerId, patch) {
+    // patch: { content?, wing?, room? } — only send changed fields
+    return putJson('/drawers/' + encodeURIComponent(drawerId), patch || {});
+  }
+
+  async function deleteDrawer(drawerId) {
+    return deleteJson('/drawers/' + encodeURIComponent(drawerId));
+  }
+
   // ----- diary / usage / tools / turns -----
 
   async function getDiary() {
@@ -208,6 +231,10 @@ window.KaguyaAPI = (function () {
     getGraphTunnels,
     getAllTunnels,
     getLlmConfig,
+    putJson,
+    deleteJson,
+    updateDrawer,
+    deleteDrawer,
     getDiary,
     getUsage,
     getToolCalls,
