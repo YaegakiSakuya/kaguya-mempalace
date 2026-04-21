@@ -89,217 +89,366 @@
   <div id="main-content">
     <div class="content">
 
-      <header class="page-head">
-        <div>
-          <div class="eyebrow">LLM Config · 言語模型設定</div>
-          <h1 class="page-title">三个 provider，<span class="em">五个角色。</span></h1>
-          <p class="page-sub">角色即用途：<em>chat</em> / <em>extract</em> / <em>embed</em> / <em>summarize</em> / <em>rename</em>。不同 wing 可以指定覆盖默认 provider。</p>
-        </div>
-        <div class="page-head-right">
-          <div class="big">3 <span style="font-size:13px;color:var(--text-3)">/ 5</span></div>
-          <div>PROVIDERS · ROLES</div>
-          <div class="accent">● ALL HEALTHY</div>
-        </div>
-      </header>
+      <header class="page-head" id="page-head"></header>
 
       <div class="llm-layout">
-
-        <!-- providers list -->
-        <aside>
-          <div class="prov-head"><span>Providers</span><span style="color:var(--camellia-text)">+ ADD</span></div>
-          <div class="prov-list">
-            <a class="prov active" href="#anthropic">
-              <span class="prov-dot"></span>
-              <div>
-                <div class="prov-name">Anthropic</div>
-                <div class="prov-model">claude-sonnet-4.5</div>
-              </div>
-              <div class="prov-role">chat · extract</div>
-            </a>
-            <a class="prov" href="#openai">
-              <span class="prov-dot"></span>
-              <div>
-                <div class="prov-name">OpenAI</div>
-                <div class="prov-model">text-embedding-3-large</div>
-              </div>
-              <div class="prov-role">embed</div>
-            </a>
-            <a class="prov" href="#local">
-              <span class="prov-dot warn"></span>
-              <div>
-                <div class="prov-name">local · ollama</div>
-                <div class="prov-model">qwen2.5:14b</div>
-              </div>
-              <div class="prov-role">summarize · rename</div>
-            </a>
-          </div>
-
-          <div class="prov-head" style="margin-top: 20px;"><span>Roles</span></div>
-          <div style="display:flex;flex-direction:column;gap:2px;">
-            <div class="prov"><span class="prov-dot"></span><div><div class="prov-name">chat</div><div class="prov-model">drawer 对话 · 写作协助</div></div></div>
-            <div class="prov"><span class="prov-dot"></span><div><div class="prov-name">extract</div><div class="prov-model">triple 抽取 · entity 识别</div></div></div>
-            <div class="prov"><span class="prov-dot"></span><div><div class="prov-name">embed</div><div class="prov-model">语义索引 · 搜索</div></div></div>
-            <div class="prov"><span class="prov-dot warn"></span><div><div class="prov-name">summarize</div><div class="prov-model">AAAK 聚合 · drawer 摘要</div></div></div>
-            <div class="prov"><span class="prov-dot warn"></span><div><div class="prov-name">rename</div><div class="prov-model">自动命名 drawer / room</div></div></div>
-          </div>
-        </aside>
-
-        <!-- main config panel -->
-        <section class="cfg">
-          <div class="cfg-head">
-            <div>
-              <h2 class="cfg-name">Anthropic · claude-sonnet-4.5</h2>
-              <div class="cfg-sub">PROVIDER · chat · extract</div>
-            </div>
-            <div class="cfg-badges">
-              <span class="chip ok">● healthy</span>
-              <span class="chip">cache hit 78%</span>
-              <span class="chip">lat p95 &nbsp; 1.2s</span>
-            </div>
-          </div>
-
-          <div class="cfg-body">
-            <div class="cfg-row">
-              <div class="cfg-k">API Key <span class="hint">encrypted at rest</span></div>
-              <div class="cfg-v">
-                <div class="secret-field">
-                  <span>sk-ant-api03-•••••••••••••••••••••••••••••••-a4f9</span>
-                  <span class="toggle">ROTATE</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="cfg-row">
-              <div class="cfg-k">Base URL <span class="hint">optional proxy</span></div>
-              <div class="cfg-v"><span class="mono" style="color:var(--text-2)">https://api.anthropic.com</span></div>
-            </div>
-
-            <div class="cfg-row">
-              <div class="cfg-k">Model <span class="hint">per-role override below</span></div>
-              <div class="cfg-v">
-                <span class="chip hot" style="margin-right:6px;">claude-sonnet-4.5</span>
-                <span class="chip">claude-haiku-4.5</span>
-                <span class="chip">claude-opus-4</span>
-              </div>
-            </div>
-
-            <div class="cfg-row">
-              <div class="cfg-k">Temperature <span class="hint">creativity ↔ fidelity</span></div>
-              <div class="cfg-v">
-                <div class="slider">
-                  <div class="track"></div>
-                  <div class="fill" style="width:32%"></div>
-                  <div class="knob" style="left:calc(32% - 6px)"></div>
-                </div>
-                <div class="slider-meta"><span>0.0 · 事实</span><span>0.32</span><span>1.0 · 发散</span></div>
-              </div>
-            </div>
-
-            <div class="cfg-row">
-              <div class="cfg-k">Max tokens</div>
-              <div class="cfg-v">
-                <span class="mono">4096</span>
-                <span style="color:var(--text-3);font-family:var(--mono);font-size:11px;letter-spacing:0.1em;"> &nbsp; / &nbsp; 200,000 ctx</span>
-              </div>
-            </div>
-
-            <div class="cfg-row">
-              <div class="cfg-k">Role bindings <span class="hint">此 provider 承担</span></div>
-              <div class="cfg-v">
-                <div class="role-matrix">
-                  <div class="role-cell on"><div class="t">chat</div><div class="v">claude-sonnet-4.5</div></div>
-                  <div class="role-cell on"><div class="t">extract</div><div class="v">claude-haiku-4.5</div></div>
-                  <div class="role-cell"><div class="t">embed</div><div class="v" style="color:var(--text-3)">—</div></div>
-                  <div class="role-cell"><div class="t">summarize</div><div class="v" style="color:var(--text-3)">—</div></div>
-                  <div class="role-cell"><div class="t">rename</div><div class="v" style="color:var(--text-3)">—</div></div>
-                </div>
-              </div>
-            </div>
-
-            <div class="cfg-row">
-              <div class="cfg-k">System prompt <span class="hint">前置上下文 · 宫殿语气</span></div>
-              <div class="cfg-v">
-                <div style="border:1px solid var(--border);border-radius:2px;padding:14px 16px;background:rgba(20,20,24,0.55);font-family:var(--mono);font-size:11.5px;line-height:1.85;color:var(--text-2);max-height:120px;overflow-y:auto;">
-你正在协助 yue 书写 kaguya-mempalace——一座宋夜气质的长期记忆宫殿。语言层 <span style="color:var(--text)">简洁、克制、书卷气</span>，避免夸饰和现代营销腔。当以 かぐや 的身份出现时，语气温柔而稍有距离…
-                </div>
-              </div>
-            </div>
-
-            <div class="cfg-row">
-              <div class="cfg-k">Rate limit</div>
-              <div class="cfg-v">
-                <span class="mono">50 rpm</span>
-                <span style="color:var(--text-3);margin:0 8px;">·</span>
-                <span class="mono">40,000 tpm</span>
-                <span class="delta" style="margin-left:12px">● under limit</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- json snapshot + usage -->
-        <aside>
-          <div class="json-panel">
-            <div class="json-head">
-              <span class="kicker">Config · kaguya.toml</span>
-              <span class="kicker" style="color:var(--camellia-text);cursor:pointer;">COPY</span>
-            </div>
-            <div class="json-body"><span class="c"># llm.providers.anthropic</span>
-<span class="k">api_key</span>       = <span class="s">"sk-ant-…a4f9"</span>
-<span class="k">model</span>         = <span class="s">"claude-sonnet-4.5"</span>
-<span class="k">temperature</span>   = <span class="n">0.32</span>
-<span class="k">max_tokens</span>    = <span class="n">4096</span>
-<span class="k">roles</span>         = [<span class="s">"chat"</span>, <span class="s">"extract"</span>]
-
-<span class="c"># llm.providers.openai</span>
-<span class="k">api_key</span>       = <span class="s">"sk-…19bd"</span>
-<span class="k">model</span>         = <span class="s">"text-embed-3-l"</span>
-<span class="k">roles</span>         = [<span class="s">"embed"</span>]
-<span class="k">dim</span>           = <span class="n">3072</span>
-
-<span class="c"># llm.providers.local</span>
-<span class="k">base_url</span>      = <span class="s">"http://localhost:11434"</span>
-<span class="k">model</span>         = <span class="s">"qwen2.5:14b"</span>
-<span class="k">roles</span>         = [<span class="s">"summarize"</span>, <span class="s">"rename"</span>]
-<span class="k">streaming</span>     = <span class="b">true</span>
-
-<span class="c"># wing-level overrides</span>
-<span class="p">[wings.kaguya.llm]</span>
-<span class="k">chat_model</span>    = <span class="s">"claude-opus-4"</span>
-<span class="k">temperature</span>   = <span class="n">0.42</span>
-
-<span class="p">[wings.chats.llm]</span>
-<span class="k">summary_only</span>  = <span class="b">true</span></div>
-          </div>
-
-          <div class="json-panel" style="margin-top: 14px; padding: 18px 20px;">
-            <div class="kicker">Usage · this month</div>
-            <div class="usage">
-              <div class="usage-cell"><div class="k">Input tok</div><div class="n">2.14M</div><div class="s">anthropic · 82%</div></div>
-              <div class="usage-cell"><div class="k">Output tok</div><div class="n">412K</div><div class="s">anthropic · 78%</div></div>
-              <div class="usage-cell"><div class="k">Embeddings</div><div class="n">8,402</div><div class="s">openai · $0.27</div></div>
-              <div class="usage-cell"><div class="k">Local runs</div><div class="n">1,284</div><div class="s">ollama · free</div></div>
-            </div>
-            <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10.5px;color:var(--text-2);letter-spacing:0.08em;">
-              estimated cost <span style="color:var(--text);">$18.42</span> · budget $40
-              <div style="height:1px;background:var(--border);margin-top:8px;position:relative;"><span style="position:absolute;left:0;top:0;bottom:0;width:46%;background:var(--camellia);"></span></div>
-            </div>
-          </div>
-
-          <div class="json-panel" style="margin-top: 14px; padding: 18px 20px;">
-            <div class="kicker">Health · last 24h</div>
-            <div style="display:grid;grid-template-columns:1fr auto;gap:8px 16px;margin-top:14px;font-size:12px;">
-              <div style="color:var(--text)">Anthropic</div><div class="mono" style="color:var(--success)">● 100% · p95 1.2s</div>
-              <div style="color:var(--text)">OpenAI</div><div class="mono" style="color:var(--success)">● 100% · p95 0.3s</div>
-              <div style="color:var(--text)">local · ollama</div><div class="mono" style="color:var(--camellia-text)">● 94% · p95 4.8s</div>
-            </div>
-          </div>
-        </aside>
+        <aside id="providers-aside"></aside>
+        <section class="cfg" id="cfg-panel"></section>
+        <aside id="right-aside"></aside>
       </div>
     </div>
   </div>
 </div>
 <script src="assets/data.js"></script>
 <script src="assets/shell.js"></script>
+<script src="assets/api.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const esc = window.KaguyaAPI.escapeHtml;
+  const fmtRel = window.KaguyaAPI.formatRelativeTime;
+  const fmtCount = window.KaguyaAPI.formatCount;
+
+  // ---------- state ----------
+  let llmConfig = null;
+  let selectedProviderId = null;
+
+  // ---------- helpers ----------
+  function shortDate(iso) {
+    if (!iso) return '—';
+    const s = String(iso);
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  }
+
+  function currentProvider() {
+    const providers = (llmConfig && llmConfig.providers) || [];
+    return providers.find(p => p.id === selectedProviderId) || providers[0] || null;
+  }
+
+  // ---------- page head ----------
+  function renderPageHead() {
+    const el = document.getElementById('page-head');
+    if (!el) return;
+    try {
+      const providers = (llmConfig && llmConfig.providers) || [];
+      const active = (llmConfig && llmConfig.active) || {};
+      el.innerHTML = `
+        <div>
+          <div class="eyebrow">LLM Config · 言語模型設定</div>
+          <h1 class="page-title">${providers.length} 个 provider,<span class="em">当前活跃 ${esc(active.provider_name || '—')}。</span></h1>
+          <p class="page-sub">active 指向整个 kaguya-mempalace 当前使用的 provider + model。切换 active 需通过 mempalace 接口(本页只读展示)。</p>
+        </div>
+        <div class="page-head-right">
+          <div class="big">${providers.length}</div>
+          <div>PROVIDERS</div>
+          <div class="accent">● ACTIVE · ${esc(active.model || '—')}</div>
+        </div>
+      `;
+    } catch (err) {
+      console.error('renderPageHead failed:', err);
+    }
+  }
+
+  // ---------- left aside: providers + active binding ----------
+  function renderProvidersAside() {
+    const el = document.getElementById('providers-aside');
+    if (!el) return;
+    try {
+      const providers = (llmConfig && llmConfig.providers) || [];
+      const active = (llmConfig && llmConfig.active) || {};
+      const activeId = active.provider_id || null;
+
+      const itemsHtml = providers.map(p => {
+        const isActive = p.id === activeId;
+        const isSelected = p.id === selectedProviderId;
+        return `
+          <a class="prov${isSelected ? ' active' : ''}" href="#${esc(p.id)}" data-provider-id="${esc(p.id)}">
+            <span class="prov-dot${isActive ? '' : ' warn'}"></span>
+            <div>
+              <div class="prov-name">${esc(p.name || '—')}</div>
+              <div class="prov-model">${esc(p.last_model || '—')}</div>
+            </div>
+            <div class="prov-role">${isActive ? 'ACTIVE' : ''}</div>
+          </a>
+        `;
+      }).join('');
+
+      const bindingHtml = `
+        <div class="prov">
+          <span class="prov-dot"></span>
+          <div>
+            <div class="prov-name">${esc(active.provider_name || '—')}</div>
+            <div class="prov-model">${esc(active.model || '—')}</div>
+          </div>
+          <div class="prov-role">live</div>
+        </div>
+        <div style="margin-top:6px;padding:0 2px;font-size:10.5px;color:var(--text-3);font-family:var(--mono);letter-spacing:0.04em;word-break:break-all;line-height:1.5;">
+          ${esc(active.base_url || '')}
+        </div>
+      `;
+
+      el.innerHTML = `
+        <div class="prov-head">
+          <span>Providers</span>
+          <span style="color:var(--text-3);font-size:10px;letter-spacing:0.18em;">READ-ONLY</span>
+        </div>
+        <div class="prov-list">${itemsHtml || '<div style="color:var(--text-3);font-size:12px;padding:12px 14px;">未配置 provider。</div>'}</div>
+
+        <div class="prov-head" style="margin-top: 20px;">
+          <span>Active Binding</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          ${bindingHtml}
+        </div>
+      `;
+    } catch (err) {
+      console.error('renderProvidersAside failed:', err);
+    }
+  }
+
+  // ---------- main cfg panel ----------
+  function renderCfgPanel() {
+    const el = document.getElementById('cfg-panel');
+    if (!el) return;
+    try {
+      const p = currentProvider();
+      if (!p) {
+        el.innerHTML = '<div style="padding:30px;color:var(--text-3);">没有可展示的 provider。</div>';
+        return;
+      }
+      const active = (llmConfig && llmConfig.active) || {};
+      const isActive = p.id === active.provider_id;
+      const models = p.available_models || [];
+      const modelChipsHtml = models.length === 0
+        ? '<span style="color:var(--text-3);font-size:12px;">未缓存。首次使用时自动刷新。</span>'
+        : models.map(m => {
+            const isLast = m === p.last_model;
+            return `<span class="chip${isLast ? ' hot' : ''}">${esc(m)}</span>`;
+          }).join('');
+
+      const refreshedLabel = p.models_refreshed_at
+        ? `${fmtRel(p.models_refreshed_at)} · ${p.models_refreshed_at}`
+        : '—';
+
+      el.innerHTML = `
+        <div class="cfg-head">
+          <div>
+            <h2 class="cfg-name">${esc(p.name || '—')} <span style="font-size:14px;color:var(--text-3);margin-left:8px;font-family:var(--mono);">${isActive ? '· ACTIVE' : ''}</span></h2>
+            <div class="cfg-sub">PROVIDER · id ${esc((p.id || '').slice(0, 8))}…</div>
+          </div>
+          <div class="cfg-badges">
+            ${isActive ? '<span class="chip ok">● active</span>' : '<span class="chip">standby</span>'}
+            <span class="chip">${models.length} models</span>
+            <span class="chip">since ${esc(shortDate(p.created_at))}</span>
+          </div>
+        </div>
+
+        <div class="cfg-body">
+
+          <div class="cfg-row">
+            <div class="cfg-k">API Key <span class="hint">server-side, masked here</span></div>
+            <div class="cfg-v">
+              <div class="secret-field">
+                <span style="font-family:var(--mono);">${esc(p.api_key || '***')}</span>
+                <span class="toggle" style="color:var(--text-3);cursor:default;">READ-ONLY</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cfg-row">
+            <div class="cfg-k">Base URL</div>
+            <div class="cfg-v">
+              <span class="mono" style="color:var(--text-2);word-break:break-all;">${esc(p.base_url || '—')}</span>
+            </div>
+          </div>
+
+          <div class="cfg-row">
+            <div class="cfg-k">Last Model <span class="hint">most recent active model</span></div>
+            <div class="cfg-v">
+              <span class="chip hot">${esc(p.last_model || '—')}</span>
+            </div>
+          </div>
+
+          <div class="cfg-row">
+            <div class="cfg-k">Available Models <span class="hint">${models.length} cached</span></div>
+            <div class="cfg-v" style="display:flex;flex-wrap:wrap;gap:6px;max-height:180px;overflow-y:auto;padding-right:8px;">
+              ${modelChipsHtml}
+            </div>
+          </div>
+
+          <div class="cfg-row">
+            <div class="cfg-k">Models Refreshed</div>
+            <div class="cfg-v">
+              <span class="mono" style="color:var(--text-2);">${esc(refreshedLabel)}</span>
+            </div>
+          </div>
+
+          <div class="cfg-row">
+            <div class="cfg-k">Created</div>
+            <div class="cfg-v">
+              <span class="mono" style="color:var(--text-2);">${esc(p.created_at || '—')}</span>
+            </div>
+          </div>
+
+        </div>
+      `;
+    } catch (err) {
+      console.error('renderCfgPanel failed:', err);
+    }
+  }
+
+  // ---------- right aside: JSON + usage ----------
+  function renderRightAsideShell() {
+    const el = document.getElementById('right-aside');
+    if (!el) return;
+    el.innerHTML = `
+      <div class="json-panel">
+        <div class="json-head">
+          <span class="kicker">Config · JSON Snapshot</span>
+          <span class="kicker" id="copy-json" style="color:var(--camellia-text);cursor:pointer;">COPY</span>
+        </div>
+        <div class="json-body" id="json-snapshot"></div>
+      </div>
+
+      <div class="json-panel" style="margin-top:16px;">
+        <div class="json-head">
+          <span class="kicker">Recent Usage · Last 10</span>
+          <span class="kicker" style="color:var(--text-3);">/api/usage</span>
+        </div>
+        <div id="usage-list" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+    `;
+  }
+
+  function renderJsonSnapshot(p) {
+    const container = document.getElementById('json-snapshot');
+    if (!container) return;
+    try {
+      if (!p) {
+        container.innerHTML = '<span class="c">// no provider selected</span>';
+        return;
+      }
+      const lines = [
+        { comment: '// provider' },
+        { key: 'id', val: `"${p.id || ''}"`, kind: 's' },
+        { key: 'name', val: `"${p.name || ''}"`, kind: 's' },
+        { key: 'base_url', val: `"${p.base_url || ''}"`, kind: 's' },
+        { key: 'api_key', val: `"${p.api_key || ''}"`, kind: 's' },
+        { key: 'last_model', val: `"${p.last_model || ''}"`, kind: 's' },
+        { key: 'available_models', val: `[${(p.available_models || []).length}]`, kind: 'n' },
+        { key: 'created_at', val: `"${p.created_at || ''}"`, kind: 's' },
+        { key: 'models_refreshed_at', val: `"${p.models_refreshed_at || ''}"`, kind: 's' },
+      ];
+      const html = lines.map(l => {
+        if (l.comment) return `<span class="c">${esc(l.comment)}</span>`;
+        return `<span class="k">${esc(l.key)}</span> = <span class="${l.kind}">${esc(l.val)}</span>`;
+      }).join('\n');
+      container.innerHTML = html;
+    } catch (err) {
+      console.error('renderJsonSnapshot failed:', err);
+    }
+  }
+
+  function bindCopyButton() {
+    const btn = document.getElementById('copy-json');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const p = currentProvider();
+      if (!p) return;
+      const snapshot = {
+        id: p.id,
+        name: p.name,
+        base_url: p.base_url,
+        api_key: p.api_key,
+        last_model: p.last_model,
+        available_models: p.available_models,
+        created_at: p.created_at,
+        models_refreshed_at: p.models_refreshed_at,
+      };
+      const text = JSON.stringify(snapshot, null, 2);
+      const done = () => {
+        const orig = btn.textContent;
+        btn.textContent = 'COPIED';
+        setTimeout(() => { btn.textContent = orig; }, 1200);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(err => {
+          console.error('clipboard write failed:', err);
+        });
+      }
+    });
+  }
+
+  async function renderUsage() {
+    const container = document.getElementById('usage-list');
+    if (!container) return;
+    try {
+      const usage = await window.KaguyaAPI.getUsage();
+      const list = Array.isArray(usage) ? usage : [];
+      const recent = list.slice(-10).reverse();
+
+      if (recent.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-3);font-size:12px;">暂无调用记录。</div>';
+        return;
+      }
+
+      container.innerHTML = recent.map(u => `
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding-bottom:7px;border-bottom:1px solid var(--border);">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;">
+            <span class="mono" style="font-size:11.5px;color:var(--text);">${esc(u.model || '—')}</span>
+            <span class="mono" style="font-size:10px;color:var(--text-3);letter-spacing:0.04em;">${esc(u.turn_type || '')} · ${esc(fmtRel(u.ts) || '')}</span>
+          </div>
+          <div class="mono" style="font-size:11px;color:var(--text-2);white-space:nowrap;">
+            ${esc(fmtCount(u.prompt_tokens))} / ${esc(fmtCount(u.completion_tokens))}
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      console.error('getUsage failed:', err);
+      container.innerHTML = `<div style="color:var(--camellia-text);font-size:12px;">usage 加载失败</div>`;
+    }
+  }
+
+  // ---------- orchestration ----------
+  function renderAll() {
+    renderPageHead();
+    renderProvidersAside();
+    renderCfgPanel();
+    renderJsonSnapshot(currentProvider());
+  }
+
+  // click delegation on provider rows
+  document.addEventListener('click', (e) => {
+    const prov = e.target.closest('.prov[data-provider-id]');
+    if (!prov) return;
+    e.preventDefault();
+    const id = prov.dataset.providerId;
+    if (!id || id === selectedProviderId) return;
+    selectedProviderId = id;
+    renderAll();
+  });
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    renderRightAsideShell();
+    bindCopyButton();
+    try {
+      llmConfig = await window.KaguyaAPI.getLlmConfig();
+      const providers = (llmConfig && llmConfig.providers) || [];
+      const active = (llmConfig && llmConfig.active) || {};
+      selectedProviderId = active.provider_id || (providers[0] && providers[0].id) || null;
+      renderAll();
+    } catch (err) {
+      console.error('llm page init failed:', err);
+      const content = document.querySelector('.content');
+      if (content) {
+        content.innerHTML = `<div style="padding:40px;color:var(--camellia-text);">LLM config 加载失败: ${esc(err && err.message ? err.message : String(err))}</div>`;
+      }
+      return;
+    }
+    renderUsage();
+  });
+})();
+</script>
 </body>
 </html>
