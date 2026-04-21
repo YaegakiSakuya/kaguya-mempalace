@@ -426,6 +426,69 @@
     svg.innerHTML = `<g>${edgesHtml}</g><g>${nodesHtml}</g>`;
   }
 
+  function renderDetailPanel(name, triples) {
+    const aside = document.querySelector('.kg-detail');
+    if (!aside) return;
+
+    const entity = entitiesList.find((e) => e && e.name === name) || {};
+    const type = entity.type || 'entity';
+    const list = Array.isArray(triples) ? triples : [];
+
+    const outgoing = list.filter((t) => t && t.direction === 'outgoing');
+    const incoming = list.filter((t) => t && t.direction === 'incoming');
+    const totalCount = list.length;
+
+    const tripleRows = list.slice(0, 20).map((t) => {
+      const subj = t.subject || '';
+      const obj = t.object || '';
+      const pred = t.predicate || t.relation || '';
+      const isOutgoing = t.direction === 'outgoing';
+      const arrow = isOutgoing ? '→' : '←';
+      const subjHtml = isOutgoing ? esc(truncate(subj, 18)) : esc(truncate(obj, 18));
+      const objHtml = isOutgoing ? esc(truncate(obj, 28)) : esc(truncate(subj, 28));
+      const confRaw = t.confidence;
+      const confNum = (typeof confRaw === 'number') ? confRaw : null;
+      const confCls = (confNum !== null && confNum < 0.7) ? 'conf low' : 'conf';
+      const confHtml = (confNum !== null)
+        ? `<span class="${confCls}">conf ${confNum.toFixed(2)}</span>`
+        : '';
+      const metaParts = [];
+      if (confHtml) metaParts.push(confHtml);
+      if (t.source) metaParts.push(esc(String(t.source).toUpperCase()));
+      const metaHtml = metaParts.length ? `<span class="meta">${metaParts.join(' · ')}</span>` : '';
+      return `<div class="triple">`
+        + `<span class="subj">${subjHtml}</span>`
+        + `<span class="pred">${arrow} ${esc(truncate(pred, 22))}</span>`
+        + `<span class="obj">${objHtml}</span>`
+        + metaHtml
+        + `</div>`;
+    }).join('');
+
+    const emptyListHtml = `<div style="padding:20px;color:var(--text-3);font-size:12px;">该 entity 暂无 triple。</div>`;
+
+    aside.innerHTML = `
+      <div class="kg-d-card">
+        <div class="kg-d-kind">${esc(String(type).toUpperCase())}</div>
+        <h3 class="kg-d-name">${esc(truncate(name, 32))}</h3>
+        <div class="kg-d-stats">
+          <div class="kg-d-stat"><div class="n">${totalCount}</div><span class="k">triples</span></div>
+          <div class="kg-d-stat"><div class="n">${outgoing.length}</div><span class="k">outgoing</span></div>
+          <div class="kg-d-stat"><div class="n">${incoming.length}</div><span class="k">incoming</span></div>
+        </div>
+      </div>
+
+      <div class="kg-d-card" style="padding: 0;">
+        <div style="padding:14px 16px 8px;display:flex;justify-content:space-between;align-items:baseline;">
+          <span class="kicker">Triples</span>
+          <span class="kicker" style="color:var(--text-2)">${totalCount} total</span>
+        </div>
+        <div class="triple-list">
+          ${tripleRows || emptyListHtml}
+        </div>
+      </div>
+    `;
+  }
+
   async function loadEntityTriples(name) {
     const svg = document.querySelector('.kg-canvas svg');
     if (!svg) return;
@@ -436,8 +499,11 @@
         triples = Array.isArray(resp) ? resp : (resp && resp.triples) || [];
         tripleCache.set(name, triples);
       }
+      if (name !== currentEntity) return;
       renderGraphCanvas(name, triples);
+      renderDetailPanel(name, triples);
     } catch (err) {
+      if (name !== currentEntity) return;
       console.error('loadEntityTriples failed:', err);
       svg.innerHTML = `<text x="360" y="310" text-anchor="middle" fill="var(--camellia-text)" style="font-family:var(--mono);font-size:12px;">加载失败</text>`;
     }
