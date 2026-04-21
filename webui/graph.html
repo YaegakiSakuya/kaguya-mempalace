@@ -491,13 +491,17 @@
     `;
   }
 
+  // Keep in sync with openEntityModal so the modal can safely reuse this cache
+  // without under-reporting triples for entities already loaded by the rail.
+  const TRIPLE_FETCH_LIMIT = 100;
+
   async function loadEntityTriples(name) {
     const svg = document.querySelector('.kg-canvas svg');
     if (!svg) return;
     try {
       let triples = tripleCache.get(name);
       if (!triples) {
-        const resp = await window.KaguyaAPI.getKgTriples({ entity: name, limit: 50 });
+        const resp = await window.KaguyaAPI.getKgTriples({ entity: name, limit: TRIPLE_FETCH_LIMIT });
         triples = Array.isArray(resp) ? resp : (resp && resp.triples) || [];
         tripleCache.set(name, triples);
       }
@@ -597,7 +601,7 @@
     const triplesPromise = (async () => {
       if (tripleCache.has(name)) return tripleCache.get(name);
       try {
-        const resp = await window.KaguyaAPI.getKgTriples({ entity: name, limit: 100 });
+        const resp = await window.KaguyaAPI.getKgTriples({ entity: name, limit: TRIPLE_FETCH_LIMIT });
         const list = Array.isArray(resp) ? resp : (resp && resp.triples) || [];
         tripleCache.set(name, list);
         return list;

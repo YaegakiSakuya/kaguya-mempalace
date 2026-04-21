@@ -25,12 +25,14 @@ window.KaguyaModal = (function () {
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-  let current = null; // { backdrop, onClose, keyHandler }
+  let current = null; // { backdrop, onClose, keyHandler, prevOverflow }
+  let pending = null; // a modal mid-close whose cleanup hasn't run yet
 
   function close() {
     if (!current) return;
     const me = current;
     current = null;
+    pending = me;
 
     document.removeEventListener('keydown', me.keyHandler, true);
     me.backdrop.classList.remove('open');
@@ -38,7 +40,13 @@ window.KaguyaModal = (function () {
     const backdrop = me.backdrop;
     const done = () => {
       if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
-      document.body.style.overflow = me.prevOverflow || '';
+      if (pending === me) pending = null;
+      // Only restore body overflow if no replacement modal (opened or still closing)
+      // is around — otherwise we'd unlock scroll while another modal is visible,
+      // or on the final close snap the page back to the 'hidden' we imposed.
+      if (!current && !pending) {
+        document.body.style.overflow = me.prevOverflow || '';
+      }
     };
     const handler = (ev) => {
       if (ev.target !== backdrop) return;
@@ -57,6 +65,10 @@ window.KaguyaModal = (function () {
 
   function open(opts) {
     opts = opts || {};
+    // Inherit prevOverflow from the outgoing (or still-closing) modal so the
+    // pre-modal page style isn't lost to the 'hidden' we imposed on the body.
+    const predecessor = current || pending;
+    const inheritedPrev = predecessor ? predecessor.prevOverflow : null;
     if (current) close();
 
     const backdrop = document.createElement('div');
@@ -132,7 +144,7 @@ window.KaguyaModal = (function () {
     };
     document.addEventListener('keydown', keyHandler, true);
 
-    const prevOverflow = document.body.style.overflow;
+    const prevOverflow = inheritedPrev !== null ? inheritedPrev : document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     document.body.appendChild(backdrop);
 
