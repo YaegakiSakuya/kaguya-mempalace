@@ -372,8 +372,10 @@ webui/
 ### Drawer 拖拽跨 wing 移动(Wings 页)
 
 - 右侧 `.d-tile` 可拖到左侧 `.wl-item` 的某个 wing 行,释放后弹 modal 确认目标 wing + room(默认原 room 可改)
+- 同 wing 内跨 room 拖拽:`.d-tile` 拖到右侧**另一个** `.room-row`,弹同一个 modal,目标 room 预填为落点 room 名(仍可编辑)。落点 `.room-row` 是整个 row(含左侧 meta 区),命中面积足够大
 - 落地机制:只调 `PUT /api/drawers/{id}` 传 `{wing, room}`,chroma embedding 不重建(mempalace handler 只在 content 变更时才 re-embed)
-- Drop 到非 wl-item 区域或源 wing = 静默失败不弹 modal
+- Drop 到非 wl-item / 非 room-row 区域、源 wing 或源 room = 静默失败不弹 modal
+- 拖到 `(unassigned)` 桶 = 静默失败(避免把字面量 "(unassigned)" 写进 metadata;如需清空 room 走 drawer 编辑 modal)
 - 取消 modal = drawer 保持原位
 
 ### Webui 写操作的鉴权边界
