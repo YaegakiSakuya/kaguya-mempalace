@@ -102,6 +102,7 @@
 <script src="assets/data.js"></script>
 <script src="assets/shell.js"></script>
 <script src="assets/api.js"></script>
+<script src="assets/modal.js"></script>
 <script>
 (function () {
   'use strict';
@@ -191,7 +192,7 @@
       el.innerHTML = `
         <div class="prov-head">
           <span>Providers</span>
-          <span style="color:var(--text-3);font-size:10px;letter-spacing:0.18em;">READ-ONLY</span>
+          <button class="btn ghost" id="btn-add-provider" data-action="add-provider" style="font-size:10.5px;padding:4px 12px;letter-spacing:0.14em;">+ 新增</button>
         </div>
         <div class="prov-list">${itemsHtml || '<div style="color:var(--text-3);font-size:12px;padding:12px 14px;">未配置 provider。</div>'}</div>
 
@@ -224,7 +225,7 @@
         ? '<span style="color:var(--text-3);font-size:12px;">未缓存。首次使用时自动刷新。</span>'
         : models.map(m => {
             const isLast = m === p.last_model;
-            return `<span class="chip${isLast ? ' hot' : ''}">${esc(m)}</span>`;
+            return `<span class="chip${isLast ? ' hot' : ''}" data-action="model-click" data-provider-id="${esc(p.id)}" data-model="${esc(m)}" style="cursor:pointer;">${esc(m)}</span>`;
           }).join('');
 
       const refreshedLabel = p.models_refreshed_at
@@ -244,15 +245,20 @@
           </div>
         </div>
 
+        <div class="cfg-actions" style="padding: 14px 26px 16px; border-bottom: 1px solid var(--border); display:flex; gap:8px;">
+          <button class="btn" data-action="edit-info" data-provider-id="${esc(p.id)}">编辑信息</button>
+          <button class="btn" data-action="rotate-key" data-provider-id="${esc(p.id)}">轮换 key</button>
+          <button class="btn" data-action="refresh-models" data-provider-id="${esc(p.id)}">刷新模型列表</button>
+          <button class="btn danger" data-action="delete-provider" data-provider-id="${esc(p.id)}" ${isActive ? 'disabled aria-disabled="true" title="请先切换 active 到其他 provider"' : ''}>删除 provider</button>
+        </div>
+
         <div class="cfg-body">
 
           <div class="cfg-row">
             <div class="cfg-k">API Key <span class="hint">server-side, masked here</span></div>
             <div class="cfg-v">
-              <div class="secret-field">
-                <span style="font-family:var(--mono);">${esc(p.api_key || '***')}</span>
-                <span class="toggle" style="color:var(--text-3);cursor:default;">READ-ONLY</span>
-              </div>
+              <span style="font-family:var(--mono);color:var(--text-2);">${esc(p.api_key || '***')}</span>
+              <span style="margin-left:12px;color:var(--text-3);font-family:var(--mono);font-size:10px;letter-spacing:0.14em;">点 "轮换 key" 修改</span>
             </div>
           </div>
 
@@ -410,6 +416,362 @@
     }
   }
 
+  // ---------- shared: password field DOM builder ----------
+  function buildPasswordField(name, placeholder) {
+    const wrap = document.createElement('div');
+    wrap.className = 'kg-password-field';
+    const input = document.createElement('input');
+    input.type = 'password';
+    input.name = name;
+    input.placeholder = placeholder || '';
+    input.autocomplete = 'new-password';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'kg-pw-toggle';
+    toggle.textContent = 'SHOW';
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (input.type === 'password') { input.type = 'text'; toggle.textContent = 'HIDE'; }
+      else { input.type = 'password'; toggle.textContent = 'SHOW'; }
+    });
+    wrap.appendChild(input);
+    wrap.appendChild(toggle);
+    return { wrap, input };
+  }
+
+  // ---------- after any write: reload config and rerender ----------
+  async function reloadAndRender(newlySelectedId) {
+    try {
+      llmConfig = await window.KaguyaAPI.getLlmConfig();
+      const providers = (llmConfig && llmConfig.providers) || [];
+      const active = (llmConfig && llmConfig.active) || {};
+      if (newlySelectedId && providers.some(p => p.id === newlySelectedId)) {
+        selectedProviderId = newlySelectedId;
+      } else if (!providers.some(p => p.id === selectedProviderId)) {
+        selectedProviderId = active.provider_id || (providers[0] && providers[0].id) || null;
+      }
+      renderAll();
+    } catch (err) {
+      console.error('reload llm config failed:', err);
+    }
+  }
+
+  // ---------- modal: add provider ----------
+  function openAddProviderModal() {
+    const form = document.createElement('form');
+    form.className = 'kg-modal-form';
+    form.addEventListener('submit', (e) => e.preventDefault());
+
+    const nameField = document.createElement('div');
+    nameField.className = 'kg-modal-field';
+    nameField.innerHTML = '<label>Name</label><input name="name" type="text" placeholder="e.g. OpenRouter">';
+    form.appendChild(nameField);
+
+    const urlField = document.createElement('div');
+    urlField.className = 'kg-modal-field';
+    urlField.innerHTML = '<label>Base URL</label><input name="base_url" type="text" placeholder="https://openrouter.ai/api/v1">';
+    form.appendChild(urlField);
+
+    const keyFieldWrap = document.createElement('div');
+    keyFieldWrap.className = 'kg-modal-field';
+    const keyLabel = document.createElement('label');
+    keyLabel.textContent = 'API Key';
+    keyFieldWrap.appendChild(keyLabel);
+    const { wrap: keyWrap, input: keyInput } = buildPasswordField('api_key', 'sk-...');
+    keyFieldWrap.appendChild(keyWrap);
+    form.appendChild(keyFieldWrap);
+
+    const errBanner = document.createElement('div');
+    form.appendChild(errBanner);
+
+    const showErr = (msg) => { errBanner.innerHTML = `<div class="kg-modal-error">${esc(msg)}</div>`; };
+
+    window.KaguyaModal.open({
+      title: '新增 Provider',
+      subtitle: 'ADD LLM PROVIDER',
+      body: form,
+      actions: [
+        { label: '取消', variant: 'ghost', onClick: () => window.KaguyaModal.close() },
+        { label: '创建', variant: 'primary', onClick: async () => {
+          const name = form.querySelector('[name=name]').value.trim();
+          const base_url = form.querySelector('[name=base_url]').value.trim();
+          const api_key = keyInput.value.trim();
+          if (!name || !base_url || !api_key) { showErr('三个字段都是必填'); return; }
+          try {
+            const res = await window.KaguyaAPI.addLlmProvider({ name, base_url, api_key });
+            window.KaguyaModal.close();
+            await reloadAndRender(res && res.provider && res.provider.id);
+          } catch (err) {
+            showErr(err && err.message ? err.message : String(err));
+          }
+        }},
+      ],
+    });
+  }
+
+  // ---------- modal: edit info (name + base_url only) ----------
+  function openEditInfoModal(provider) {
+    const form = document.createElement('form');
+    form.className = 'kg-modal-form';
+    form.addEventListener('submit', (e) => e.preventDefault());
+    form.innerHTML = `
+      <div class="kg-modal-field">
+        <label>Name</label>
+        <input name="name" type="text" value="${esc(provider.name || '')}">
+      </div>
+      <div class="kg-modal-field">
+        <label>Base URL</label>
+        <input name="base_url" type="text" value="${esc(provider.base_url || '')}">
+      </div>
+    `;
+    const errBanner = document.createElement('div');
+    form.appendChild(errBanner);
+    const showErr = (msg) => { errBanner.innerHTML = `<div class="kg-modal-error">${esc(msg)}</div>`; };
+
+    window.KaguyaModal.open({
+      title: `编辑 · ${provider.name}`,
+      subtitle: 'EDIT PROVIDER INFO',
+      body: form,
+      actions: [
+        { label: '取消', variant: 'ghost', onClick: () => window.KaguyaModal.close() },
+        { label: '保存', variant: 'primary', onClick: async () => {
+          const name = form.querySelector('[name=name]').value.trim();
+          const base_url = form.querySelector('[name=base_url]').value.trim();
+          const patch = {};
+          if (name !== (provider.name || '')) patch.name = name;
+          if (base_url !== (provider.base_url || '')) patch.base_url = base_url;
+          if (Object.keys(patch).length === 0) {
+            window.KaguyaModal.close();
+            return;
+          }
+          try {
+            await window.KaguyaAPI.updateLlmProvider(provider.id, patch);
+            window.KaguyaModal.close();
+            await reloadAndRender(provider.id);
+          } catch (err) {
+            showErr(err && err.message ? err.message : String(err));
+          }
+        }},
+      ],
+    });
+  }
+
+  // ---------- modal: rotate api_key ----------
+  function openRotateKeyModal(provider) {
+    const form = document.createElement('form');
+    form.className = 'kg-modal-form';
+    form.addEventListener('submit', (e) => e.preventDefault());
+
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:12px;color:var(--text-3);line-height:1.7;margin-bottom:6px;';
+    hint.innerHTML = `为 <span style="color:var(--text);">${esc(provider.name)}</span> 设置新的 API key。旧 key 立即失效。`;
+    form.appendChild(hint);
+
+    const keyField = document.createElement('div');
+    keyField.className = 'kg-modal-field';
+    keyField.innerHTML = '<label>New API Key</label>';
+    const { wrap: keyWrap, input: keyInput } = buildPasswordField('api_key', 'sk-...');
+    keyField.appendChild(keyWrap);
+    form.appendChild(keyField);
+
+    const errBanner = document.createElement('div');
+    form.appendChild(errBanner);
+    const showErr = (msg) => { errBanner.innerHTML = `<div class="kg-modal-error">${esc(msg)}</div>`; };
+
+    window.KaguyaModal.open({
+      title: `轮换 Key · ${provider.name}`,
+      subtitle: 'ROTATE API KEY',
+      body: form,
+      actions: [
+        { label: '取消', variant: 'ghost', onClick: () => window.KaguyaModal.close() },
+        { label: '轮换', variant: 'danger', onClick: async () => {
+          const api_key = keyInput.value.trim();
+          if (!api_key) { showErr('请输入新 key'); return; }
+          try {
+            await window.KaguyaAPI.updateLlmProvider(provider.id, { api_key });
+            window.KaguyaModal.close();
+            await reloadAndRender(provider.id);
+          } catch (err) {
+            showErr(err && err.message ? err.message : String(err));
+          }
+        }},
+      ],
+    });
+  }
+
+  // ---------- modal: confirm delete provider ----------
+  function openConfirmDeleteModal(provider) {
+    const body = document.createElement('div');
+    body.innerHTML = `
+      <div class="kg-modal-confirm-text">
+        确定要删除 <span style="color:var(--text);">${esc(provider.name)}</span> 吗?
+        <span class="warn">操作不可逆, provider 和相关配置立即从运行时消失。</span>
+      </div>
+    `;
+    const errBanner = document.createElement('div');
+    body.appendChild(errBanner);
+    const showErr = (msg) => { errBanner.innerHTML = `<div class="kg-modal-error">${esc(msg)}</div>`; };
+
+    window.KaguyaModal.open({
+      title: '删除 Provider',
+      subtitle: 'CONFIRM DELETE',
+      body: body,
+      actions: [
+        { label: '取消', variant: 'ghost', onClick: () => window.KaguyaModal.close() },
+        { label: '确认删除', variant: 'danger', onClick: async () => {
+          try {
+            await window.KaguyaAPI.deleteLlmProvider(provider.id);
+            window.KaguyaModal.close();
+            await reloadAndRender(null);
+          } catch (err) {
+            showErr(err && err.message ? err.message : String(err));
+          }
+        }},
+      ],
+    });
+  }
+
+  // ---------- action: refresh models ----------
+  async function handleRefreshModels(providerId) {
+    const p = (llmConfig.providers || []).find(x => x.id === providerId);
+    if (!p) return;
+    const btn = document.querySelector(`[data-action="refresh-models"][data-provider-id="${providerId}"]`);
+    const originalText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '刷新中…'; }
+    try {
+      await window.KaguyaAPI.refreshLlmModels(providerId);
+      await reloadAndRender(providerId);
+    } catch (err) {
+      console.error('refresh models failed:', err);
+      alert('刷新模型列表失败: ' + (err && err.message ? err.message : String(err)));
+      if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    }
+  }
+
+  // ---------- model chip click: toggle action tray ----------
+  function handleModelClick(providerId, model, chipEl) {
+    // If the clicked chip already has a tray right after it with the same model,
+    // treat the click as "collapse" and stop here.
+    const nextSib = chipEl.nextElementSibling;
+    const alreadyOpen = nextSib
+      && nextSib.classList.contains('kg-action-tray')
+      && nextSib.dataset.ownerProvider === providerId
+      && nextSib.dataset.ownerModel === model;
+
+    // Always close any existing tray(s) belonging to this provider first.
+    document.querySelectorAll('.kg-action-tray[data-owner-provider]').forEach(t => {
+      if (t.dataset.ownerProvider === providerId) t.remove();
+    });
+
+    if (alreadyOpen) return;
+
+    const tray = document.createElement('div');
+    tray.className = 'kg-action-tray';
+    tray.dataset.ownerProvider = providerId;
+    tray.dataset.ownerModel = model;
+    tray.innerHTML = `
+      <button data-action="ping-model">Ping 测试</button>
+      <button class="primary" data-action="set-active">Set as Active</button>
+      <span class="kg-ping-status" style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--text-3);letter-spacing:0.12em;"></span>
+    `;
+    chipEl.insertAdjacentElement('afterend', tray);
+
+    tray.querySelector('[data-action=ping-model]').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const statusEl = tray.querySelector('.kg-ping-status');
+      statusEl.textContent = 'pinging…';
+      statusEl.className = 'kg-ping-status';
+      try {
+        const r = await window.KaguyaAPI.pingLlmProvider(providerId, model);
+        if (r && r.ok) {
+          const lat = (typeof r.latency_ms !== 'undefined') ? `${r.latency_ms}ms` : '';
+          statusEl.innerHTML = `<span class="kg-ping-result ok">● ok${lat ? ' · ' + esc(lat) : ''}</span>`;
+          tray.dataset.pinged = 'ok';
+        } else {
+          const errMsg = (r && r.error) ? String(r.error) : 'unknown';
+          statusEl.innerHTML = `<span class="kg-ping-result fail">● fail · ${esc(errMsg.slice(0, 40))}</span>`;
+          tray.dataset.pinged = 'fail';
+        }
+      } catch (err) {
+        const m = err && err.message ? err.message : String(err);
+        statusEl.innerHTML = `<span class="kg-ping-result fail">● error · ${esc(m.slice(0, 40))}</span>`;
+        tray.dataset.pinged = 'fail';
+      }
+    });
+
+    tray.querySelector('[data-action=set-active]').addEventListener('click', (e) => {
+      e.preventDefault();
+      const pinged = tray.dataset.pinged;
+      openSetActiveModal(providerId, model, pinged === 'ok');
+    });
+  }
+
+  // ---------- modal: set active with ping 护栏 ----------
+  function openSetActiveModal(providerId, model, pingedOk) {
+    const p = (llmConfig.providers || []).find(x => x.id === providerId);
+    if (!p) return;
+
+    // showErr queries the live modal for a fresh error slot — survives KaguyaModal.update()
+    // which swaps the body DOM and would otherwise detach any captured errBanner reference.
+    const showErr = (msg) => {
+      const slot = document.querySelector('.kg-modal-card .kg-modal-body .kg-modal-error-slot');
+      if (slot) slot.innerHTML = `<div class="kg-modal-error">${esc(msg)}</div>`;
+    };
+
+    const doSwitch = async () => {
+      try {
+        await window.KaguyaAPI.setLlmActive({ provider_id: providerId, model });
+        window.KaguyaModal.close();
+        await reloadAndRender(providerId);
+      } catch (err) {
+        showErr(err && err.message ? err.message : String(err));
+      }
+    };
+
+    const stage1Body = document.createElement('div');
+    const pingStatus = pingedOk
+      ? '<div style="color:var(--success);font-size:12px;margin-top:8px;">● 已 ping 通过, 可以安全切换</div>'
+      : '<div style="color:var(--camellia-text);font-size:12px;margin-top:8px;">⚠ 未经 ping 测试, 建议先 ping 再切换</div>';
+    stage1Body.innerHTML = `
+      <div class="kg-modal-confirm-text">
+        切换 active 到 <span style="color:var(--text);">${esc(p.name)} · ${esc(model)}</span>?
+        <span class="warn">kaguya-mempalace 下一次 LLM 调用会立即使用新配置。</span>
+        ${pingStatus}
+      </div>
+      <div class="kg-modal-error-slot"></div>
+    `;
+
+    const actions = pingedOk
+      ? [
+          { label: '取消', variant: 'ghost', onClick: () => window.KaguyaModal.close() },
+          { label: '确认切换', variant: 'primary', onClick: doSwitch },
+        ]
+      : [
+          { label: '取消', variant: 'ghost', onClick: () => window.KaguyaModal.close() },
+          { label: '强制切换', variant: 'danger', onClick: () => {
+            const stage2Body = document.createElement('div');
+            stage2Body.innerHTML = `
+              <div class="kg-modal-confirm-text">未经 ping 测试, 确定继续?<span class="warn">若 provider/model 配置错误, gateway 会在下次调用时报错直到你切回正确配置。</span></div>
+              <div class="kg-modal-error-slot"></div>
+            `;
+            window.KaguyaModal.update({
+              body: stage2Body,
+              actions: [
+                { label: '返回', variant: 'ghost', onClick: () => openSetActiveModal(providerId, model, false) },
+                { label: '我确定, 切换', variant: 'danger', onClick: doSwitch },
+              ],
+            });
+          }},
+        ];
+
+    window.KaguyaModal.open({
+      title: '切换 Active',
+      subtitle: 'SET ACTIVE PROVIDER · MODEL',
+      body: stage1Body,
+      actions: actions,
+    });
+  }
+
   // ---------- orchestration ----------
   function renderAll() {
     renderPageHead();
@@ -418,15 +780,47 @@
     renderJsonSnapshot(currentProvider());
   }
 
-  // click delegation on provider rows
+  // click delegation on provider rows and all data-action triggers
   document.addEventListener('click', (e) => {
+    // Provider-row selection: only when the click is NOT on an action trigger
     const prov = e.target.closest('.prov[data-provider-id]');
-    if (!prov) return;
+    if (prov && !e.target.closest('[data-action]')) {
+      e.preventDefault();
+      const id = prov.dataset.providerId;
+      if (id && id !== selectedProviderId) {
+        selectedProviderId = id;
+        renderAll();
+      }
+      return;
+    }
+
+    const actionEl = e.target.closest('[data-action]');
+    if (!actionEl) return;
+    if (actionEl.disabled) return;
     e.preventDefault();
-    const id = prov.dataset.providerId;
-    if (!id || id === selectedProviderId) return;
-    selectedProviderId = id;
-    renderAll();
+    const action = actionEl.dataset.action;
+
+    if (action === 'add-provider') {
+      openAddProviderModal();
+      return;
+    }
+
+    const providerId = actionEl.dataset.providerId;
+    const provider = (llmConfig && llmConfig.providers || []).find(x => x.id === providerId);
+    if (!provider) return;
+
+    switch (action) {
+      case 'edit-info':      openEditInfoModal(provider); break;
+      case 'rotate-key':     openRotateKeyModal(provider); break;
+      case 'delete-provider': {
+        const activeId = llmConfig && llmConfig.active && llmConfig.active.provider_id;
+        if (provider.id === activeId) return; // disabled, no-op
+        openConfirmDeleteModal(provider);
+        break;
+      }
+      case 'refresh-models': handleRefreshModels(providerId); break;
+      case 'model-click':    handleModelClick(providerId, actionEl.dataset.model, actionEl); break;
+    }
   });
 
   document.addEventListener('DOMContentLoaded', async () => {
