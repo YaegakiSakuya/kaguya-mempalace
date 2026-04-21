@@ -408,10 +408,13 @@
     }
   }
 
-  function refreshCurrentWing() {
-    if (!currentWingKey) return Promise.resolve();
-    drawerCache.delete(currentWingKey);
-    return loadWingDetail(currentWingKey, { preserveScroll: true });
+  function invalidateWingsAndRefresh(editedWings) {
+    const set = new Set((editedWings || []).filter(Boolean));
+    set.forEach((w) => drawerCache.delete(w));
+    if (currentWingKey && set.has(currentWingKey)) {
+      return loadWingDetail(currentWingKey, { preserveScroll: true });
+    }
+    return Promise.resolve();
   }
 
   function pickInitialWing() {
@@ -447,6 +450,13 @@
     if (meta.wing) subParts.push(meta.wing);
     if (meta.room) subParts.push(meta.room);
     const subtitle = subParts.join(' · ');
+
+    // Captured at modal open; do not read currentWingKey after an awaited call.
+    const originalWingKey = meta.wing || currentWingKey;
+    // Flipped by onClose (any close path). Every async callback that touches
+    // modal DOM or calls KaguyaModal.* must guard on this — otherwise a
+    // late-arriving response could mutate a subsequently-opened modal.
+    let modalActive = true;
 
     const snapshot = {
       content: fullInitial,
@@ -575,7 +585,7 @@
     }
 
     async function handleSave() {
-      if (editState.saving) return;
+      if (editState.saving || !modalActive) return;
 
       if (typeof editState.content !== 'string' || editState.content.trim() === '') {
         showEditError('Content 不能为空');
@@ -591,49 +601,54 @@
       editState.saving = true;
       try {
         const result = await window.KaguyaAPI.updateDrawer(drawer.id, patch);
-        if (result && result.success === false) {
-          showEditError(result.error || '保存失败');
+        const success = !(result && result.success === false);
+        if (success) {
+          // Always invalidate the affected wings, even if the user closed the
+          // originating modal mid-flight. Otherwise a cache stale to the real
+          // state survives.
+          const touched = [originalWingKey];
+          if (patch.wing && patch.wing !== originalWingKey) touched.push(patch.wing);
+          if (modalActive) window.KaguyaModal.close();
+          await invalidateWingsAndRefresh(touched);
           return;
         }
-        window.KaguyaModal.close();
-        await refreshCurrentWing();
+        // success === false — show inline error only if originating modal
+        // is still on screen. If user navigated away, swallow silently.
+        if (modalActive) showEditError(result.error || '保存失败');
       } catch (err) {
         console.error('updateDrawer failed:', err);
-        showEditError((err && err.message) ? err.message : String(err));
+        if (modalActive) showEditError((err && err.message) ? err.message : String(err));
       } finally {
         editState.saving = false;
       }
     }
 
+    function showBodyError(msg) {
+      if (!modalActive) return;
+      const bodyEl = document.querySelector('.kg-modal-body');
+      if (!bodyEl) return;
+      const existing = bodyEl.querySelector('.kg-modal-error');
+      if (existing) existing.remove();
+      const err = document.createElement('div');
+      err.className = 'kg-modal-error';
+      err.textContent = msg;
+      bodyEl.appendChild(err);
+    }
+
     async function handleDelete() {
+      if (!modalActive) return;
       try {
         const result = await window.KaguyaAPI.deleteDrawer(drawer.id);
-        if (result && result.success === false) {
-          const msg = result.error || '删除失败';
-          const bodyEl = document.querySelector('.kg-modal-body');
-          if (bodyEl) {
-            const existing = bodyEl.querySelector('.kg-modal-error');
-            if (existing) existing.remove();
-            const err = document.createElement('div');
-            err.className = 'kg-modal-error';
-            err.textContent = msg;
-            bodyEl.appendChild(err);
-          }
+        const success = !(result && result.success === false);
+        if (success) {
+          if (modalActive) window.KaguyaModal.close();
+          await invalidateWingsAndRefresh([originalWingKey]);
           return;
         }
-        window.KaguyaModal.close();
-        await refreshCurrentWing();
+        showBodyError(result.error || '删除失败');
       } catch (err) {
         console.error('deleteDrawer failed:', err);
-        const bodyEl = document.querySelector('.kg-modal-body');
-        if (bodyEl) {
-          const existing = bodyEl.querySelector('.kg-modal-error');
-          if (existing) existing.remove();
-          const errEl = document.createElement('div');
-          errEl.className = 'kg-modal-error';
-          errEl.textContent = (err && err.message) ? err.message : String(err);
-          bodyEl.appendChild(errEl);
-        }
+        showBodyError((err && err.message) ? err.message : String(err));
       }
     }
 
@@ -645,6 +660,7 @@
         { label: '删除', variant: 'danger', onClick: enterConfirmDeleteState },
         { label: '编辑', variant: 'primary', onClick: enterEditState },
       ],
+      onClose: () => { modalActive = false; },
     });
   }
 
