@@ -65,6 +65,7 @@ OPS_DIR = Path("/home/ubuntu/apps/kaguya-mempalace/ops")
 CORE_IDENTITY_FILE = OPS_DIR / "prompts" / "core_identity.md"
 WRITING_CONSTITUTION_FILE = OPS_DIR / "prompts" / "writing_constitution.md"
 SYSTEM_PROMPT_FILE = OPS_DIR / "prompts" / "system.md"
+CHECKPOINT_INSTRUCTION_FILE = OPS_DIR / "prompts" / "checkpoint_instruction.md"
 
 
 def _clean_text(value: str) -> str:
@@ -191,12 +192,14 @@ def _load_external_prompt_material() -> dict[str, str]:
         "core": _read_optional_text(CORE_IDENTITY_FILE),
         "writing": _read_optional_text(WRITING_CONSTITUTION_FILE),
         "system": _read_optional_text(SYSTEM_PROMPT_FILE),
+        "checkpoint": _read_optional_text(CHECKPOINT_INSTRUCTION_FILE),
     }
     logger.info(
-        "external prompt material loaded core_chars=%s writing_chars=%s system_chars=%s",
+        "external prompt material loaded core_chars=%s writing_chars=%s system_chars=%s checkpoint_chars=%s",
         len(docs["core"]),
         len(docs["writing"]),
         len(docs["system"]),
+        len(docs["checkpoint"]),
     )
     return docs
 
@@ -334,16 +337,35 @@ def build_reply_system_prompt(
 
 
 def build_checkpoint_system_prompt(settings: Settings, wakeup_text: str) -> str:
+    """Build the autosave checkpoint system prompt.
+
+    Layers DNA (system/writing/core identity + wakeup + diary horizon from
+    _base_system_sections) then appends the checkpoint instruction loaded
+    from ops/prompts/checkpoint_instruction.md — which tells Kaguya how to
+    write diary, identify topics, pick wing + room, and optionally build
+    tunnels. Falls back to a minimal English instruction if the external
+    file is missing, so autosave never hard-fails on a missing prompt.
+    """
     sections: List[str] = _base_system_sections(settings, wakeup_text)
-    sections.extend(
-        [
-            "You are performing an INTERNAL MemPalace save checkpoint, not a user-visible reply.",
-            "Use the original MemPalace tools to save what matters from the recent Telegram conversation.",
-            "Prefer diary, KG, and drawer tools when appropriate.",
-            "Do not chat with the user during this checkpoint.",
-            "When you are done saving, reply with exactly: CHECKPOINT_COMPLETE",
-        ]
-    )
+    checkpoint_instruction = _load_external_prompt_material()["checkpoint"]
+    if checkpoint_instruction:
+        sections.extend(
+            [
+                "=== AUTOSAVE CHECKPOINT INSTRUCTION ===",
+                checkpoint_instruction,
+            ]
+        )
+    else:
+        logger.warning(
+            "checkpoint_instruction.md missing — falling back to minimal English"
+        )
+        sections.extend(
+            [
+                "You are performing an INTERNAL MemPalace save checkpoint, not a user-visible reply.",
+                "Use MemPalace tools to save what matters from the recent conversation.",
+                "When you are done saving, reply with exactly: CHECKPOINT_COMPLETE",
+            ]
+        )
     return "\n\n".join(section for section in sections if section)
 
 
