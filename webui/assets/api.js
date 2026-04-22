@@ -232,8 +232,8 @@ window.KaguyaAPI = (function () {
     return apiFetch('/usage');
   }
 
-  async function getToolCalls() {
-    return apiFetch('/tools/calls');
+  async function getToolCalls(opts) {
+    return apiFetch('/tools/calls' + buildQuery({ last_n: opts && opts.last_n }));
   }
 
   async function getTurns() {

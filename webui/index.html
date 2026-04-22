@@ -597,7 +597,7 @@
     let lastWrite = null;
 
     try {
-      const calls = await window.KaguyaAPI.getToolCalls();
+      const calls = await window.KaguyaAPI.getToolCalls({ last_n: 500 });
       const todayYmd = ymdLocal(now);
       (Array.isArray(calls) ? calls : []).forEach((c) => {
         if (!WRITE_TOOLS[c.tool_name]) return;
@@ -869,7 +869,7 @@
     if (!container) return;
     showLoading(container, 'Loading activity…');
     try {
-      const calls = await window.KaguyaAPI.getToolCalls();
+      const calls = await window.KaguyaAPI.getToolCalls({ last_n: 500 });
       if (!Array.isArray(calls) || calls.length === 0) {
         container.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:20px;">暂无活动记录</div>';
         return;
