@@ -129,7 +129,7 @@
           <div class="palace-meta">
             <div><span class="pulse"></span><span class="v">${K.palaceMeta.name}</span></div>
             <div style="margin-top:4px;">SINCE &nbsp; <span class="v">${K.palaceMeta.since}</span></div>
-            <div>SYNC &nbsp;&nbsp; <span class="v">${K.palaceMeta.sync}</span></div>
+            <div>SYNC &nbsp;&nbsp; <span class="v" data-sync-value>${K.palaceMeta.sync}</span></div>
           </div>
         </div>
       </aside>`;
@@ -243,6 +243,56 @@
   }
 
   window.KaguyaShell.initNavCounts = initNavCounts;
+
+  // ---------- SYNC live updater (palace-meta footer) ----------
+  // Polls /api/tools/calls for the most recent call and renders its
+  // relative age into [data-sync-value]. No anchor → leaves the
+  // data.js initial '—' as-is. Single interval; cleared on page unload.
+  let __syncTimer = null;
+  let __syncAnchorIso = null;
+
+  function renderSync() {
+    const el = document.querySelector('[data-sync-value]');
+    if (!el) return;
+    if (!__syncAnchorIso) return;
+    try {
+      const rel = window.KaguyaAPI && window.KaguyaAPI.formatRelativeTime
+        ? window.KaguyaAPI.formatRelativeTime(__syncAnchorIso)
+        : '';
+      if (rel) el.textContent = rel;
+    } catch (_) { /* leave previous value */ }
+  }
+
+  async function refreshSyncAnchor() {
+    if (!window.KaguyaAPI) return;
+    try {
+      // /api/tools/calls returns tail-ordered array; last entry is newest.
+      const calls = await window.KaguyaAPI.getToolCalls({ last_n: 1 });
+      if (Array.isArray(calls) && calls.length) {
+        const c = calls[calls.length - 1];
+        const ts = c && (c.ts || c.timestamp);
+        if (ts) {
+          const iso = String(ts).replace(' ', 'T');
+          const d = new Date(iso);
+          if (!isNaN(d.getTime())) {
+            __syncAnchorIso = d.toISOString();
+          }
+        }
+      }
+    } catch (_) { /* keep previous anchor, if any */ }
+    renderSync();
+  }
+
+  function initSyncUpdater() {
+    if (__syncTimer) { clearInterval(__syncTimer); __syncTimer = null; }
+    refreshSyncAnchor();
+    __syncTimer = setInterval(refreshSyncAnchor, 30000);
+    window.addEventListener('beforeunload', () => {
+      if (__syncTimer) { clearInterval(__syncTimer); __syncTimer = null; }
+    });
+  }
+
+  window.KaguyaShell.initSyncUpdater = initSyncUpdater;
 
   // ---------- crawl counter for any .crawl-num element ----------
   function crawlCounters() {
@@ -444,5 +494,6 @@
     crawlCounters();
     makeCmdK();
     initNavCounts();
+    initSyncUpdater();
   });
 })();
