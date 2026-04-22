@@ -1040,6 +1040,82 @@
 
   // ---------- bootstrap ----------
 
+  // ---------- Section: Tunnels Mini (cross-wing connections preview) ----------
+
+  async function renderTunnelsMini() {
+    const container = document.querySelector('.tunnels-mini');
+    if (!container) return;
+    try {
+      const resp = await window.KaguyaAPI.getAllTunnels();
+      const tunnels = Array.isArray(resp)
+        ? resp
+        : (resp && Array.isArray(resp.tunnels) ? resp.tunnels : []);
+
+      if (!tunnels.length) {
+        container.innerHTML = `
+          <div class="tunnel-head">
+            <div class="kicker">Tunnels · 跨翼连接</div>
+          </div>
+          <div style="color:var(--text-3);font-size:12px;padding:14px 2px;">
+            还没有 tunnel 被创建。
+          </div>
+        `;
+        return;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
+      const activeToday = tunnels.filter((t) => {
+        const ts = String((t && (t.created_at || t.date)) || '');
+        return ts.slice(0, 10) === today;
+      }).length;
+
+      // newest first; API may or may not pre-sort, so sort defensively
+      const sorted = tunnels.slice().sort((a, b) => {
+        const ta = new Date((a && (a.created_at || a.date)) || 0).getTime();
+        const tb = new Date((b && (b.created_at || b.date)) || 0).getTime();
+        return (isFinite(tb) ? tb : 0) - (isFinite(ta) ? ta : 0);
+      });
+      const top = sorted.slice(0, 3);
+
+      const rowsHtml = top.map((t) => {
+        const from = (t && t.from) || {};
+        const to = (t && t.to) || {};
+        const fromWing = wingShortName(from.wing || '');
+        const fromRoom = from.room || '';
+        const toWing = wingShortName(to.wing || '');
+        const toRoom = to.room || '';
+        const predicate = t.predicate || t.relation || 'links';
+        const refs = t.refs != null ? t.refs : (t.weight != null ? t.weight : 1);
+        return `
+          <div class="tunnel-row">
+            <div class="side">${fromWing ? '<span class="wing-tag">' + esc(fromWing) + '</span>' : ''}${esc(fromRoom)}</div>
+            <div class="link"><span class="line"></span>${esc(predicate)}<span class="line"></span></div>
+            <div class="side right">${esc(toRoom)}${toWing ? '<span class="wing-tag">' + esc(toWing) + '</span>' : ''}</div>
+            <div class="count">${esc(String(refs))} refs</div>
+          </div>
+        `;
+      }).join('');
+
+      container.innerHTML = `
+        <div class="tunnel-head">
+          <div class="kicker">Tunnels · 跨翼连接</div>
+          <div class="kicker" style="color:var(--text-2)">${activeToday} / ${tunnels.length} active today</div>
+        </div>
+        ${rowsHtml}
+      `;
+    } catch (err) {
+      console.error('renderTunnelsMini failed:', err);
+      container.innerHTML = `
+        <div class="tunnel-head">
+          <div class="kicker">Tunnels · 跨翼连接</div>
+        </div>
+        <div style="color:var(--camellia-text);font-size:12px;padding:14px 2px;">
+          加载失败: ${esc(err && err.message ? err.message : String(err))}
+        </div>
+      `;
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     renderPageHead();
     renderStats();
@@ -1047,7 +1123,7 @@
     renderTimeline();
     renderRecentDrawers();
     renderTodayDiary();
-    // tunnels-mini: intentionally left hardcoded (PR5)
+    renderTunnelsMini();
   });
 })();
 </script>
