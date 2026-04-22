@@ -135,10 +135,14 @@ async def run_autosave(application: Application, settings: Settings, chat_id: st
                 )
                 _write_turn_summary(settings.logs_dir, checkpoint_result, "checkpoint", chat_id)
 
-            try:
-                await asyncio.to_thread(mine_conversations, settings)
-            except Exception:
-                logger.exception("mine_conversations failed for chat_id=%s (non-fatal)", chat_id)
+            # === mine_conversations disabled 2026-04-22 ===
+            # 原因:把 runtime/chats/*.md 按 800 字符硬切进 wing=chats,绕过七 wing 新架构。
+            # checkpoint LLM 已按 checkpoint_instruction.md 做了语义归档,不需再来一轮机械 mine。
+            # import 暂留,给未来 LLM 版重挖 pipeline 保接口。
+            # try:
+            #     await asyncio.to_thread(mine_conversations, settings)
+            # except Exception:
+            #     logger.exception("mine_conversations failed for chat_id=%s (non-fatal)", chat_id)
 
             logger.info("autosave finished for chat_id=%s", chat_id)
         except Exception:
@@ -477,12 +481,14 @@ async def post_shutdown(application: Application) -> None:
         except Exception:
             logger.exception("media_client close failed")
 
-    try:
-        if has_any_transcripts(settings):
-            await asyncio.to_thread(mine_conversations, settings)
-        logger.info("shutdown autosave completed")
-    except Exception:
-        logger.exception("shutdown autosave failed")
+    # === shutdown mine_conversations disabled 2026-04-22 ===
+    # 同上。import 保留给未来 LLM 版 pipeline。
+    # try:
+    #     if has_any_transcripts(settings):
+    #         await asyncio.to_thread(mine_conversations, settings)
+    #     logger.info("shutdown autosave completed")
+    # except Exception:
+    #     logger.exception("shutdown autosave failed")
 
 
 def build_application(settings: Settings) -> Application:
