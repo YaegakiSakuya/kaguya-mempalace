@@ -130,13 +130,13 @@
       <header class="page-head">
         <div>
           <div class="eyebrow">Overview · 宮殿全景</div>
-          <h1 class="page-title"><span id="greeting-text"></span><span class="em">宫殿今日有 9 处改动。</span></h1>
-          <p class="page-sub">最后一次写入是 12 分钟前，在 <em>kaguya · diary · 2026-04-19</em>。知识图谱新增 3 条 triple，有 1 个实体等你解消歧。</p>
+          <h1 class="page-title"><span id="greeting-text"></span><span class="em" id="overview-today-changes">—</span></h1>
+          <p class="page-sub" id="overview-sub">—</p>
         </div>
         <div class="page-head-right">
-          <div class="big">2026 · 04 · 19</div>
-          <div>日曜日 &nbsp;·&nbsp; JST</div>
-          <div class="accent">▲ 9 writes today</div>
+          <div class="big" id="overview-date-big">—</div>
+          <div id="overview-date-week">—</div>
+          <div class="accent" id="overview-accent">—</div>
         </div>
       </header>
 
@@ -165,7 +165,7 @@
 
       <section>
         <div class="section-head">
-          <h2>Palace Map <span class="jp">翼 · 13 Wings</span></h2>
+          <h2>Palace Map <span class="jp" id="overview-map-subtitle">翼 · — Wings</span></h2>
           <a class="action" href="wings.html">Open Wings →</a>
         </div>
         <div class="map-card">
@@ -456,6 +456,23 @@
 
   // ---------- Section 1: Stats ----------
 
+  // find the wing with the most drawers from /api/wings
+  // returns { dataId, name, count } or null
+  function pickHottestWing(wingsMap) {
+    let best = null;
+    Object.keys(wingsMap || {}).forEach((apiKey) => {
+      if (apiKey === 'chats') return; // archive-style wing, skip
+      const n = Number(wingsMap[apiKey] || 0);
+      if (!best || n > best.count) {
+        const dataId = apiWingIdToDataId(apiKey);
+        const meta = lookupWingMeta(dataId);
+        best = { dataId, name: meta.name || dataId, count: n };
+      }
+    });
+    if (!best || best.count <= 0) return null;
+    return best;
+  }
+
   async function renderStats() {
     const container = $('section.stats');
     if (!container) return;
@@ -470,10 +487,12 @@
       const wingsMap = normalizeWingsMap(wingsData);
       const taxonomy = (tax && tax.taxonomy) || {};
 
-      const activeWings = Math.max(0, (ov.wings || 0) - 1);
-      const chatsCount = Number(wingsMap.chats || 0);
+      // wing count: /api/overview.wings may still include a legacy 'chats' archive
+      // entry; fold that into the active tally by subtracting it if present.
+      const rawWings = Number(ov.wings || 0);
+      const activeWings = Math.max(0, rawWings - (wingsMap.chats != null ? 1 : 0));
 
-      // find hottest room across all non-chats wings
+      // hottest room across all non-chats wings (used for Rooms stat foot)
       let hot = { wingKey: '', room: '', count: 0 };
       Object.keys(taxonomy).forEach((wingKey) => {
         if (wingKey === 'chats') return;
@@ -486,8 +505,14 @@
       });
       const hotDataId = hot.wingKey ? apiWingIdToDataId(hot.wingKey) : '';
       const hotMeta = hotDataId ? lookupWingMeta(hotDataId) : { name: '' };
-      const hotFoot = hot.count > 0
+      const roomsFoot = hot.count > 0
         ? '最密 <span style="color:var(--text)">' + esc(hotMeta.name || hotDataId) + ' · ' + hot.count + '</span>'
+        : '—';
+
+      // hottest wing by drawer count (used for Drawers stat foot)
+      const hottestWing = pickHottestWing(wingsMap);
+      const drawersFoot = hottestWing
+        ? '最密 <span style="color:var(--text)">' + esc(hottestWing.name) + ' · ' + hottestWing.count + '</span>'
         : '—';
 
       const fmt = window.KaguyaAPI.formatCount;
@@ -495,18 +520,18 @@
       container.innerHTML = `
         <div class="stat">
           <div class="stat-label"><span>Wings</span><span class="kanji">翼</span></div>
-          <div class="stat-value"><span class="crawl-num">${fmt(ov.wings || 0)}</span><span class="unit">+1 sys</span></div>
-          <div class="stat-foot">${activeWings} 活跃 &nbsp;·&nbsp; 1 归档</div>
+          <div class="stat-value"><span class="crawl-num">${fmt(rawWings)}</span></div>
+          <div class="stat-foot">${activeWings} 活跃</div>
         </div>
         <div class="stat">
           <div class="stat-label"><span>Rooms</span><span class="kanji">房</span></div>
           <div class="stat-value crawl-num">${fmt(ov.rooms || 0)}</div>
-          <div class="stat-foot">${hotFoot}</div>
+          <div class="stat-foot">${roomsFoot}</div>
         </div>
         <div class="stat">
           <div class="stat-label"><span>Drawers</span><span class="kanji">屉</span></div>
           <div class="stat-value crawl-num">${fmt(ov.drawers || 0)}</div>
-          <div class="stat-foot">${fmt(chatsCount)} chats</div>
+          <div class="stat-foot">${drawersFoot}</div>
         </div>
         <div class="stat">
           <div class="stat-label"><span>Triples</span><span class="kanji">三元</span></div>
@@ -517,6 +542,115 @@
     } catch (err) {
       console.error('renderStats failed:', err);
       showError(container, err);
+    }
+  }
+
+  // ---------- page-head: date badge + today changes + last-write sub ----------
+
+  const JP_WEEKDAYS = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'];
+
+  const WRITE_TOOLS = {
+    'mempalace_add_drawer':    '写入 drawer',
+    'mempalace_update_drawer': '更新 drawer',
+    'mempalace_delete_drawer': '删除 drawer',
+    'mempalace_diary_write':   '写入 diary',
+    'mempalace_kg_add':        '新增 triple',
+    'mempalace_kg_invalidate': '作废 triple',
+    'mempalace_create_tunnel': '新建 tunnel',
+    'mempalace_delete_tunnel': '删除 tunnel',
+  };
+
+  function renderDateBadge(now) {
+    try {
+      const big = document.getElementById('overview-date-big');
+      const week = document.getElementById('overview-date-week');
+      if (big) {
+        big.textContent = now.getFullYear() + ' · ' +
+          String(now.getMonth() + 1).padStart(2, '0') + ' · ' +
+          String(now.getDate()).padStart(2, '0');
+      }
+      if (week) {
+        week.innerHTML = esc(JP_WEEKDAYS[now.getDay()]) + ' &nbsp;·&nbsp; JST';
+      }
+    } catch (e) { /* leave placeholder */ }
+  }
+
+  async function renderPageHead() {
+    const now = new Date();
+    renderDateBadge(now);
+
+    const titleEm = document.getElementById('overview-today-changes');
+    const subEl = document.getElementById('overview-sub');
+    const accent = document.getElementById('overview-accent');
+    const mapSub = document.getElementById('overview-map-subtitle');
+
+    // Static-ish: Palace Map wing count from data.js
+    try {
+      if (mapSub) {
+        const wings = (window.KAGUYA && window.KAGUYA.wings) || [];
+        mapSub.textContent = '翼 · ' + wings.length + ' Wings';
+      }
+    } catch (_) { /* leave placeholder */ }
+
+    let todayCount = 0;
+    let kgTodayCount = 0;
+    let lastWrite = null;
+
+    try {
+      const calls = await window.KaguyaAPI.getToolCalls();
+      const todayYmd = ymdLocal(now);
+      (Array.isArray(calls) ? calls : []).forEach((c) => {
+        if (!WRITE_TOOLS[c.tool_name]) return;
+        if (c.success === false) return;
+        const ts = parseTs(c.ts || c.timestamp);
+        if (!ts) return;
+        if (ymdLocal(ts) === todayYmd) {
+          todayCount++;
+          if (c.tool_name === 'mempalace_kg_add') kgTodayCount++;
+        }
+        if (!lastWrite || ts.getTime() > lastWrite.ts.getTime()) {
+          lastWrite = { ts, call: c };
+        }
+      });
+    } catch (e) {
+      console.error('renderPageHead: tool_calls fetch failed', e);
+    }
+
+    try {
+      if (titleEm) {
+        titleEm.textContent = todayCount > 0
+          ? '宫殿今日有 ' + todayCount + ' 处改动。'
+          : '宫殿今日安静。';
+      }
+      if (accent) {
+        accent.textContent = '▲ ' + todayCount + ' writes today';
+      }
+    } catch (_) { /* no-op */ }
+
+    try {
+      if (subEl) {
+        const parts = [];
+        if (lastWrite) {
+          const rel = window.KaguyaAPI.formatRelativeTime(lastWrite.ts.toISOString());
+          const args = lastWrite.call.arguments_summary || lastWrite.call.arguments || {};
+          const wingShort = args.wing ? wingShortName(args.wing) : '';
+          const room = args.room || '';
+          const loc = [wingShort, room].filter(Boolean).join(' · ');
+          if (loc) {
+            parts.push('最后一次写入是 <em>' + esc(rel) + '</em>,在 <em>' + esc(loc) + '</em>');
+          } else {
+            parts.push('最后一次写入是 <em>' + esc(rel) + '</em>');
+          }
+        } else {
+          parts.push('宫殿尚未有写入');
+        }
+        if (kgTodayCount > 0) {
+          parts.push('知识图谱今日新增 ' + kgTodayCount + ' 条 triple');
+        }
+        subEl.innerHTML = parts.join('。') + '。';
+      }
+    } catch (_) {
+      if (subEl) subEl.textContent = '—';
     }
   }
 
@@ -907,6 +1041,7 @@
   // ---------- bootstrap ----------
 
   document.addEventListener('DOMContentLoaded', () => {
+    renderPageHead();
     renderStats();
     renderWingGrid();
     renderTimeline();
