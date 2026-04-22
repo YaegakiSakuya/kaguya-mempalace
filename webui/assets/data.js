@@ -17,18 +17,18 @@ window.KAGUYA = (function () {
   const nav = [
     { group: 'Palace',      items: [
       { id: 'overview',  label: 'Overview',        href: 'index.html',          count: '—' },
-      { id: 'wings',     label: 'Wings',           href: 'wings.html',          count: '7' },
-      { id: 'graph',     label: 'Knowledge Graph', href: 'graph.html',          count: '382' },
-      { id: 'diary',     label: 'Diary',           href: 'diary.html',          count: '94' },
+      { id: 'wings',     label: 'Wings',           href: 'wings.html',          count: '—' },
+      { id: 'graph',     label: 'Knowledge Graph', href: 'graph.html',          count: '—' },
+      { id: 'diary',     label: 'Diary',           href: 'diary.html',          count: '—' },
       { id: 'search',    label: 'Search',          href: 'search.html'          },
     ]},
     { group: 'Connections', items: [
-      { id: 'tunnels',   label: 'Tunnels',         href: 'tunnels.html',        count: '17' },
+      { id: 'tunnels',   label: 'Tunnels',         href: 'tunnels.html',        count: '—' },
       { id: 'llm',       label: 'LLM Config',      href: 'llm.html'             },
     ]},
   ];
 
-  const palaceMeta = { name: 'kaguya.main', since: '2026.04.17', sync: '14s ago' };
+  const palaceMeta = { name: 'kaguya.main', since: '2026.04.17', sync: '—' };
 
   return { wings, nav, palaceMeta };
 })();
