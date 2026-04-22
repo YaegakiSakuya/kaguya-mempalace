@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -49,8 +49,6 @@ class LLMPingIn(BaseModel):
     model: Optional[str] = None
 
 logger = logging.getLogger(__name__)
-
-STATIC_DIR = Path(__file__).parent / "static"
 
 # Overview cache TTL in seconds
 OVERVIEW_TTL_SECONDS = 15
@@ -113,15 +111,6 @@ def create_inspector_app(settings: Settings) -> FastAPI:
 
     # Overview cache
     _overview_cache: dict[str, Any] = {"data": None, "ts": 0.0}
-
-    # ----- Frontend -----
-
-    @app.get("/")
-    async def serve_frontend():
-        html = STATIC_DIR / "index.html"
-        if not html.exists():
-            raise HTTPException(status_code=404, detail="Frontend not found")
-        return FileResponse(str(html), media_type="text/html")
 
     # ----- Overview -----
 
