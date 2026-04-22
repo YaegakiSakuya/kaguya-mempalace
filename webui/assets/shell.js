@@ -119,7 +119,7 @@
           <a class="nav-item${active}" href="${it.href}">
             ${ICONS[it.id] || ''}
             ${it.label}
-            ${it.count !== undefined ? `<span class="nav-count">${it.count}</span>` : ''}
+            ${it.count !== undefined ? `<span class="nav-count" data-count-key="${it.id}">${it.count}</span>` : ''}
           </a>`;
       });
       html += `</ul>`;
@@ -189,6 +189,60 @@
       setTimeout(() => { el.textContent = next; el.style.opacity = '1'; }, 150);
     }, 1000);
   }
+
+  // ---------- nav counts (live, via API) ----------
+  // Targets <span class="nav-count" data-count-key="X">...</span>
+  // Keys handled: wings, graph, diary, tunnels. Each key lives in its own
+  // try/catch so a single endpoint failure doesn't block the others, and
+  // the pre-rendered value stays as a fallback.
+  function setNavCount(key, value) {
+    if (value === undefined || value === null) return;
+    const s = (typeof value === 'number' && isFinite(value))
+      ? value.toLocaleString('en-US')
+      : String(value);
+    document.querySelectorAll('.nav-count[data-count-key="' + key + '"]').forEach(el => {
+      el.textContent = s;
+    });
+  }
+
+  async function initNavCounts() {
+    if (!window.KaguyaAPI) return;
+    const api = window.KaguyaAPI;
+
+    // Wings: data.js is the architecture source of truth, so count locally.
+    try {
+      const n = (K && Array.isArray(K.wings)) ? K.wings.length : null;
+      if (n !== null) setNavCount('wings', n);
+    } catch (_) { /* leave placeholder */ }
+
+    // KG entities from /api/kg/stats
+    try {
+      const s = await api.getKgStats();
+      const n = s && (s.entities != null ? s.entities : s.entity_count);
+      if (n != null) setNavCount('graph', n);
+    } catch (_) { /* leave placeholder */ }
+
+    // Diary entries — API returns {entries: [...], count: N} or similar
+    try {
+      const d = await api.getDiary();
+      let n = null;
+      if (d && Array.isArray(d.entries)) n = d.entries.length;
+      else if (d && typeof d.count === 'number') n = d.count;
+      else if (Array.isArray(d)) n = d.length;
+      if (n != null) setNavCount('diary', n);
+    } catch (_) { /* leave placeholder */ }
+
+    // Tunnels — /api/graph/tunnels/list returns array or {tunnels: [...]}
+    try {
+      const t = await api.getAllTunnels();
+      let n = null;
+      if (Array.isArray(t)) n = t.length;
+      else if (t && Array.isArray(t.tunnels)) n = t.tunnels.length;
+      if (n != null) setNavCount('tunnels', n);
+    } catch (_) { /* leave placeholder */ }
+  }
+
+  window.KaguyaShell.initNavCounts = initNavCounts;
 
   // ---------- crawl counter for any .crawl-num element ----------
   function crawlCounters() {
@@ -389,5 +443,6 @@
     startClock();
     crawlCounters();
     makeCmdK();
+    initNavCounts();
   });
 })();
