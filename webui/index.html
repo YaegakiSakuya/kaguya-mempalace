@@ -599,9 +599,9 @@
         mapGrid.innerHTML = dormant.map((e) => {
           const jpCode = [e.jp, e.code].filter(Boolean).map(esc).join(' \u00b7 ');
           return `
-            <a class="wing" href="wings.html#\${esc(e.dataId)}" style="opacity:0.45">
-              <div class="wing-name">\${esc(e.name)}</div>
-              <div class="wing-jp">\${jpCode}</div>
+            <a class="wing" href="wings.html#${esc(e.dataId)}" style="opacity:0.45">
+              <div class="wing-name">${esc(e.name)}</div>
+              <div class="wing-jp">${jpCode}</div>
               <div class="wing-rooms"><span class="rm" style="font-style:italic">awaiting</span></div>
               <div class="wing-stats">
                 <span><span class="n">0</span><span class="k">rm</span></span>
