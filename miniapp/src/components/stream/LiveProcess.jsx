@@ -70,6 +70,20 @@ const SYSTEM_TEXT_STYLE = {
   lineHeight: 1.5,
 }
 
+function PulseRing({ delay = 0 }) {
+  return (
+    <div style={{
+      position: 'absolute',
+      width: '110px',
+      height: '110px',
+      borderRadius: '50%',
+      border: '1px solid var(--accent)',
+      animation: `ringExpand 3.2s ease-out ${delay}s infinite`,
+      opacity: 0,
+    }} />
+  )
+}
+
 function EventContent({ event }) {
   const { type, data } = event
 
@@ -251,16 +265,16 @@ function StatSummary({ stats }) {
           lineHeight: 1.6,
         }}
       >
-        <span>in {stats.input_tokens?.toLocaleString() ?? '\u2014'}</span>
-        <span>{'\u00b7'}</span>
-        <span>out {stats.output_tokens?.toLocaleString() ?? '\u2014'}</span>
-        <span>{'\u00b7'}</span>
+        <span>in {stats.input_tokens?.toLocaleString() ?? '—'}</span>
+        <span>{'·'}</span>
+        <span>out {stats.output_tokens?.toLocaleString() ?? '—'}</span>
+        <span>{'·'}</span>
         <span>{toolCount} calls</span>
-        <span>{'\u00b7'}</span>
-        <span>{stats.elapsed_ms != null ? `${(stats.elapsed_ms / 1000).toFixed(1)}s` : '\u2014'}</span>
+        <span>{'·'}</span>
+        <span>{stats.elapsed_ms != null ? `${(stats.elapsed_ms / 1000).toFixed(1)}s` : '—'}</span>
         {hasPalaceWrites && (
           <>
-            <span>{'\u00b7'}</span>
+            <span>{'·'}</span>
             <span>{formatPalaceWrites(stats.palace_writes)}</span>
           </>
         )}
@@ -298,37 +312,66 @@ export default function LiveProcess({ status, events, stats, connected }) {
     }
   }, [mergedEvents])
 
+  // ─── idle: WaitingHero with pulse rings ───
   if (status === 'idle') {
     return (
-      <div style={{ padding: '12px 4px 24px 4px', minHeight: '200px' }}>
+      <div
+        style={{
+          flex: '1 0 auto',
+          minHeight: '340px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '56px 0 44px',
+          textAlign: 'center',
+        }}
+      >
         <div
           style={{
+            position: 'relative',
+            width: '110px',
+            height: '110px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            minHeight: '180px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '11px',
-            color: 'var(--text-secondary)',
-            opacity: 0.5,
           }}
         >
-          waiting
-          <span
+          {connected && <PulseRing delay={0} />}
+          {connected && <PulseRing delay={1.2} />}
+          <div
             style={{
-              display: 'inline-block',
-              width: '4px',
-              height: '4px',
-              borderRadius: '1px',
-              background: connected ? 'var(--success)' : 'var(--text-secondary)',
-              marginLeft: '8px',
+              width: '7px',
+              height: '7px',
+              borderRadius: '7px',
+              background: connected ? 'var(--accent)' : 'var(--text-secondary)',
+              boxShadow: connected ? '0 0 18px var(--accent-dim)' : 'none',
+              animation: connected ? 'corePulse 2.8s ease-in-out infinite' : 'none',
             }}
           />
+        </div>
+        <div
+          style={{
+            marginTop: '22px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9.5px',
+            letterSpacing: '0.42em',
+            textTransform: 'uppercase',
+            color: 'var(--text-muted)',
+          }}
+        >
+          <span style={{ width: '14px', height: '0.6px', background: 'var(--accent)' }} />
+          listening
+          <span style={{ width: '14px', height: '0.6px', background: 'var(--accent)' }} />
         </div>
       </div>
     )
   }
 
+  // ─── streaming / done: timeline (unchanged) ───
   return (
     <div style={{ padding: '12px 4px 24px 4px', minHeight: '200px' }}>
       <div style={{ position: 'relative', paddingLeft: '16px' }}>

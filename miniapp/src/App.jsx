@@ -4,61 +4,16 @@ import useSSE from './hooks/useSSE'
 import useHaptic from './hooks/useHaptic'
 import StreamPage from './pages/StreamPage'
 import PalacePage from './pages/PalacePage'
+import MoonDot from './components/MoonDot'
 import { IconStream, IconPalace } from './components/icons'
 
-function MoonPhase({ active }) {
-  return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 22 22"
-      style={{
-        opacity: active ? 0.9 : 0.4,
-        transition: 'opacity 600ms ease',
-      }}
-    >
-      <defs>
-        <mask id="moon-mask">
-          <rect width="22" height="22" fill="white" />
-          <circle r="9" cy="11" cx={active ? -9 : 30} fill="black">
-            {active && (
-              <animate
-                attributeName="cx"
-                values="-9;31;-9;11"
-                keyTimes="0;0.5;0.5001;1"
-                dur="8s"
-                repeatCount="indefinite"
-              />
-            )}
-          </circle>
-        </mask>
-      </defs>
-      <circle
-        cx="11"
-        cy="11"
-        r="9"
-        fill="var(--accent)"
-        mask="url(#moon-mask)"
-      />
-      <circle
-        cx="11"
-        cy="11"
-        r="9"
-        fill="none"
-        stroke="var(--border-strong)"
-        strokeWidth="0.5"
-      />
-    </svg>
-  )
-}
-
-function Header({ sseStatus }) {
+function Header({ connected }) {
   return (
     <header
       className="px-4 pt-3 pb-2 flex items-center"
       style={{ gap: '12px' }}
     >
-      <MoonPhase active={sseStatus !== 'idle' && sseStatus !== 'done'} />
+      <MoonDot size={14} period={6} connected={connected} />
     </header>
   )
 }
@@ -122,7 +77,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <Header sseStatus={sse.status} />
+      <Header connected={sse.connected} />
       <TabBar tab={tab} onTabChange={setTab} />
       {tab === 'stream' ? <StreamPage sse={sse} /> : <PalacePage />}
     </div>
