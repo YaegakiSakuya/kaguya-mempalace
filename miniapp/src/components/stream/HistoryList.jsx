@@ -143,7 +143,7 @@ function HistoryItem({ item, index, isLast }) {
       {/* ─── expanded detail ─── */}
       <div
         style={{
-          maxHeight: expanded ? '800px' : '0',
+          maxHeight: expanded ? '9999px' : '0',
           overflow: 'hidden',
           transition: 'max-height 0.28s ease',
         }}
