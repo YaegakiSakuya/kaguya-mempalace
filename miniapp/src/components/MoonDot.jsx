@@ -35,7 +35,7 @@ export default function MoonDot({ size = 22, period = 6, connected = true }) {
         justifyContent: 'center',
       }}
     >
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ overflow: 'visible' }}>
         <defs>
           <radialGradient id={`glow-${uid}`} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />

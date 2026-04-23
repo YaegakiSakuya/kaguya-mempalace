@@ -119,6 +119,8 @@ function HistoryItem({ item, index, isLast }) {
             fontFamily: 'var(--font-serif)',
             fontSize: '12px',
             color: 'var(--text-muted)',
+            opacity: expanded ? 0 : 1,
+            transition: 'opacity 0.2s ease',
           }}
         >
           {normalizedReply
@@ -150,7 +152,7 @@ function HistoryItem({ item, index, isLast }) {
       >
         <div
           style={{
-            padding: '2px 0 14px 74px',
+            padding: '8px 4px 14px 4px',
             fontSize: '13px',
             lineHeight: 1.75,
           }}

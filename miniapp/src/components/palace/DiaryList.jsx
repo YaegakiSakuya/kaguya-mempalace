@@ -72,7 +72,7 @@ function DiaryHeader() {
         borderBottom: '1px solid var(--border)',
       }}
     >
-      DIARY · 辉夜日记
+      DIARY
     </div>
   )
 }

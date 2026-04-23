@@ -101,3 +101,8 @@ body {
   0%, 100% { transform: scale(0.85); opacity: 0.55; }
   50% { transform: scale(1.15); opacity: 1; }
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

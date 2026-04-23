@@ -31,8 +31,6 @@ export default function AppearanceSection() {
         }}
       >
         <span style={{ color: 'var(--accent)' }}>APPEARANCE</span>
-        <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>·</span>
-        <span style={{ color: 'var(--text-muted)' }}>纸色</span>
       </div>
       <div className="card" style={{ padding: '14px 16px' }}>
         <div

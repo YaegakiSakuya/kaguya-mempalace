@@ -93,12 +93,12 @@ function ProviderForm({ initial, onSave, onCancel, isCreate }) {
     const n = name.trim()
     const u = baseUrl.trim()
     const k = apiKey.trim()
-    if (!n) { setLocalErr('name 不能为空'); return }
+    if (!n) { setLocalErr('name required'); return }
     if (!u.startsWith('http://') && !u.startsWith('https://')) {
-      setLocalErr('base_url 必须以 http:// 或 https:// 开头')
+      setLocalErr('base_url must start with http:// or https://')
       return
     }
-    if (isCreate && !k) { setLocalErr('api_key 不能为空'); return }
+    if (isCreate && !k) { setLocalErr('api_key required'); return }
     setLocalErr('')
     setSaving(true)
     try {
@@ -127,7 +127,7 @@ function ProviderForm({ initial, onSave, onCancel, isCreate }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             style={inputStyle}
-            placeholder="站点名称"
+            placeholder="provider name"
           />
         </div>
         <div>
@@ -147,7 +147,7 @@ function ProviderForm({ initial, onSave, onCancel, isCreate }) {
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             style={inputStyle}
-            placeholder={isCreate ? 'sk-...' : '留空保持不变'}
+            placeholder={isCreate ? 'sk-...' : 'leave blank to keep'}
           />
         </div>
         {localErr && (
@@ -159,10 +159,10 @@ function ProviderForm({ initial, onSave, onCancel, isCreate }) {
             disabled={saving}
             style={{ ...btnPrimaryStyle, opacity: saving ? 0.5 : 1 }}
           >
-            {saving ? '保存中...' : '保存'}
+            {saving ? 'saving…' : 'save'}
           </button>
           <button onClick={onCancel} disabled={saving} style={btnStyle}>
-            取消
+            cancel
           </button>
         </div>
       </div>
@@ -199,12 +199,12 @@ export default function LLMConfigCard() {
 
   const handleError = useCallback((err, action) => {
     if (err?.status === 401) {
-      showToast('鉴权失败，请重新打开 miniapp', 'fail')
+      showToast('auth failed · reopen miniapp', 'fail')
     } else if (err?.networkError) {
-      showToast('网络错误', 'fail')
+      showToast('network error', 'fail')
     } else {
       const msg = err?.data?.error || err?.message || 'unknown'
-      showToast(`${action} 失败：${msg}`, 'fail')
+      showToast(`${action} failed · ${msg}`, 'fail')
     }
   }, [showToast])
 
@@ -254,7 +254,7 @@ export default function LLMConfigCard() {
       if (seq !== switchSeqRef.current) return
       setActiveProviderId(prevId)
       setActiveModel(prevModel)
-      handleError(err, '切换')
+      handleError(err, 'switch')
     }
   }
 
@@ -286,7 +286,7 @@ export default function LLMConfigCard() {
       } catch (err) {
         setActiveProviderId(prevId)
         setAutoRefreshingId(null)
-        handleError(err, '刷新')
+        handleError(err, 'refresh')
         return
       }
       setAutoRefreshingId(null)
@@ -295,7 +295,7 @@ export default function LLMConfigCard() {
     const models = candidate.available_models || []
     if (models.length === 0) {
       if (didOptimisticSwitch) setActiveProviderId(prevId)
-      showToast(`${p.name} 暂无可用模型`, 'fail')
+      showToast(`${p.name} has no models`, 'fail')
       return
     }
 
@@ -326,9 +326,9 @@ export default function LLMConfigCard() {
             : p
         )
       )
-      showToast(`刷新成功 · ${models.length} 个模型`, 'ok')
+      showToast(`refreshed · ${models.length} models`, 'ok')
     } catch (err) {
-      handleError(err, '刷新')
+      handleError(err, 'refresh')
     } finally {
       setRefreshingModels(false)
     }
@@ -351,10 +351,10 @@ export default function LLMConfigCard() {
             : p
         )
       )
-      showToast(`${provider.name} 刷新成功 · ${models.length} 个模型`, 'ok')
+      showToast(`${provider.name} refreshed · ${models.length} models`, 'ok')
     } catch (err) {
       const msg = err?.data?.error || err?.message || 'unknown'
-      showToast(`${provider.name} 刷新失败：${msg}`, 'fail')
+      showToast(`${provider.name} refresh failed · ${msg}`, 'fail')
     } finally {
       setRefreshingIdSet((prev) => {
         const next = new Set(prev)
@@ -371,12 +371,12 @@ export default function LLMConfigCard() {
       const body = provider.last_model ? { model: provider.last_model } : {}
       const res = await post(`/miniapp/config/providers/${provider.id}/ping`, body)
       if (res?.ok) {
-        showToast(`${provider.name} 连通 · ${res.latency_ms}ms · ${res.model}`, 'ok')
+        showToast(`${provider.name} ok · ${res.latency_ms}ms · ${res.model}`, 'ok')
       } else {
-        showToast(`${provider.name} 测试失败：${res?.error || 'unknown'}`, 'fail')
+        showToast(`${provider.name} ping failed · ${res?.error || 'unknown'}`, 'fail')
       }
     } catch (err) {
-      handleError(err, 'Ping')
+      handleError(err, 'ping')
     } finally {
       setPingingId(null)
     }
@@ -387,9 +387,9 @@ export default function LLMConfigCard() {
       await del(`/miniapp/config/providers/${provider.id}`)
       setProviders((ps) => ps.filter((p) => p.id !== provider.id))
       setConfirmDeleteId(null)
-      showToast(`已删除 ${provider.name}`, 'ok')
+      showToast(`deleted ${provider.name}`, 'ok')
     } catch (err) {
-      handleError(err, '删除')
+      handleError(err, 'delete')
       setConfirmDeleteId(null)
     }
   }
@@ -403,9 +403,9 @@ export default function LLMConfigCard() {
         await loadAll()
       }
       setCreatingNew(false)
-      showToast('已新增站点', 'ok')
+      showToast('provider created', 'ok')
     } catch (err) {
-      handleError(err, '新增')
+      handleError(err, 'create')
     }
   }
 
@@ -418,9 +418,9 @@ export default function LLMConfigCard() {
         await loadAll()
       }
       setEditingId(null)
-      showToast('已更新', 'ok')
+      showToast('updated', 'ok')
     } catch (err) {
-      handleError(err, '编辑')
+      handleError(err, 'edit')
     }
   }
 
@@ -431,75 +431,72 @@ export default function LLMConfigCard() {
     <>
       <Toast toast={toast} />
       <div className="card" style={{ paddingLeft: '20px', paddingRight: '20px' }}>
-        {/* 第一层：当前激活 */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            padding: '14px 0',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
-          <span style={labelStyle}>当前调用</span>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-            <span style={{ fontSize: '14px', color: 'var(--accent)' }}>
-              {activeProviderName || '\u2014'}
-            </span>
-            <span
-              className="font-mono"
-              style={{ fontSize: '13px', color: 'var(--text)' }}
-            >
-              {activeModel || '\u2014'}
-            </span>
-          </div>
-        </div>
-
-        {/* 第二层：快速切换 */}
-        <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ marginBottom: '10px' }}>
-            <div style={{ ...labelStyle, marginBottom: '4px' }}>Provider</div>
+        {/* 第一层：Provider + Model 单行 · 刷新按钮图标化 */}
+        <div style={{ padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <select
               value={activeProviderId}
               onChange={handleProviderChange}
               disabled={!!autoRefreshingId}
+              aria-label="Provider"
               style={{ ...selectStyle, opacity: autoRefreshingId ? 0.5 : 1 }}
             >
-              {providers.length === 0 && <option value="">— 加载中 —</option>}
+              {providers.length === 0 && <option value="">— loading —</option>}
               {providers.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <div style={{ ...labelStyle, marginBottom: '4px' }}>Model</div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <select
-                value={modelsEmpty ? '' : activeModel}
-                onChange={handleModelChange}
-                disabled={modelsEmpty}
-                style={selectStyle}
+            <select
+              value={modelsEmpty ? '' : activeModel}
+              onChange={handleModelChange}
+              disabled={modelsEmpty}
+              aria-label="Model"
+              style={selectStyle}
+            >
+              {modelsEmpty ? (
+                <option value="">— refresh to load —</option>
+              ) : (
+                modelOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))
+              )}
+            </select>
+            <button
+              onClick={handleRefreshModels}
+              disabled={refreshingModels || !activeProviderId}
+              aria-label="Refresh models"
+              title="Refresh models"
+              style={{
+                ...btnStyle,
+                padding: '6px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                opacity: refreshingModels ? 0.5 : 1,
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  animation: refreshingModels ? 'spin 1s linear infinite' : 'none',
+                }}
               >
-                {modelsEmpty ? (
-                  <option value="">— 请先刷新模型列表 —</option>
-                ) : (
-                  modelOptions.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))
-                )}
-              </select>
-              <button
-                onClick={handleRefreshModels}
-                disabled={refreshingModels || !activeProviderId}
-                style={{ ...btnStyle, whiteSpace: 'nowrap', opacity: refreshingModels ? 0.5 : 1 }}
-              >
-                {refreshingModels ? '刷新中...' : '刷新模型列表'}
-              </button>
-            </div>
+                <path d="M12 7a5 5 0 1 1-1.5-3.5" />
+                <polyline points="12,2 12,5 9,5" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -513,12 +510,15 @@ export default function LLMConfigCard() {
               padding: '12px 0',
               cursor: 'pointer',
               color: 'var(--text-muted)',
-              fontSize: '13px',
+              fontSize: '12px',
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
               gap: '6px',
             }}
           >
             <span>{managementOpen ? '\u25BE' : '\u25B8'}</span>
-            <span>管理站点</span>
+            <span>providers</span>
           </div>
           {managementOpen && (
             <div style={{ marginLeft: '-20px', marginRight: '-20px', borderTop: '1px solid var(--border)' }}>
@@ -556,41 +556,41 @@ export default function LLMConfigCard() {
                     </div>
                     {isConfirmingDelete ? (
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>确定？</span>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>delete?</span>
                         <button
                           onClick={() => handleDelete(p)}
                           style={{ ...btnStyle, color: TOAST_FAIL_COLOR, borderColor: TOAST_FAIL_COLOR }}
                         >
-                          是
+                          yes
                         </button>
                         <button onClick={() => setConfirmDeleteId(null)} style={btnStyle}>
-                          否
+                          no
                         </button>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button onClick={() => { impact('medium'); setEditingId(p.id) }} style={btnStyle}>
-                          编辑
+                          edit
                         </button>
                         <button
                           onClick={() => handleRefreshProviderModels(p)}
                           disabled={refreshingIdSet.has(p.id)}
                           style={{ ...btnStyle, opacity: refreshingIdSet.has(p.id) ? 0.5 : 1 }}
                         >
-                          {refreshingIdSet.has(p.id) ? '刷新中...' : '刷新模型'}
+                          {refreshingIdSet.has(p.id) ? 'refreshing…' : 'refresh'}
                         </button>
                         <button
                           onClick={() => handlePing(p)}
                           disabled={pingingId === p.id}
                           style={{ ...btnStyle, opacity: pingingId === p.id ? 0.5 : 1 }}
                         >
-                          {pingingId === p.id ? '测试中...' : '测试'}
+                          {pingingId === p.id ? 'pinging…' : 'ping'}
                         </button>
                         <button
                           onClick={() => { notification('warning'); setConfirmDeleteId(p.id) }}
                           style={{ ...btnStyle, color: TOAST_FAIL_COLOR }}
                         >
-                          删除
+                          delete
                         </button>
                       </div>
                     )}
@@ -606,7 +606,7 @@ export default function LLMConfigCard() {
               ) : (
                 <div style={{ padding: '12px 16px' }}>
                   <button onClick={() => { impact('medium'); setCreatingNew(true) }} style={btnPrimaryStyle}>
-                    + 新增站点
+                    + new provider
                   </button>
                 </div>
               )}
