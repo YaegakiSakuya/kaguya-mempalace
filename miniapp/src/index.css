@@ -1,20 +1,34 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0E0E11;
-  --bg-card: #16161A;
-  --bg-hover: #1C1C21;
-  --accent: #B84D5A;
-  --accent-dim: #6B2D33;
-  --text: #E8E6E0;
-  --text-muted: #888078;
-  --text-secondary: #5A5550;
-  --border: rgba(232, 230, 224, 0.08);
-  --border-strong: rgba(232, 230, 224, 0.15);
-  --success: #7A9B7E;
-  --fail: #B84D5A;
-  --font-serif: 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', Georgia, serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  /* paper · ivory (JS hydrate 之前的默认底色) */
+  --bg: #f4efe6;
+  --bg-deep: #ece6d9;
+  --bg-card: #fbf7ee;
+  --bg-hover: #fffbf1;
+
+  /* ink · ivory 对应 */
+  --text: #3a3128;
+  --text-2: #6a5f50;
+  --text-muted: #958a78;
+  --text-secondary: #c9bda7;
+
+  /* accent · vermilion */
+  --accent: #8a2a2a;
+  --accent-dim: #a84545;
+
+  /* rules */
+  --border: rgba(50,40,28,0.06);
+  --border-strong: rgba(50,40,28,0.13);
+
+  /* status */
+  --success: #5a7a4e;
+  --fail: #8a2a2a;
+
+  /* fonts · serif */
+  --font-display: "Noto Serif SC","EB Garamond",Georgia,serif;
+  --font-serif: "EB Garamond","Noto Serif SC",Georgia,serif;
+  --font-mono: "JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
 }
 
 html, body, #root {
@@ -35,7 +49,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-serif);
-  font-weight: 300;
+  font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior-x: none;
