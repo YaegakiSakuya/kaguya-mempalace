@@ -5,6 +5,7 @@ import LLMConfigCard from '../components/palace/LLMConfigCard'
 import PulseSection from '../components/palace/PulseSection'
 import StructureSection from '../components/palace/StructureSection'
 import MindSection from '../components/palace/MindSection'
+import AppearanceSection from '../components/palace/AppearanceSection'
 
 export default function PalacePage() {
   const { initData } = useTelegram()
@@ -43,6 +44,7 @@ export default function PalacePage() {
       <PulseSection overview={overview} />
       <StructureSection wings={wings} />
       <MindSection diary={diary} />
+      <AppearanceSection />
     </div>
   )
 }
