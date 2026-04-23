@@ -41,7 +41,7 @@ function formatTime(ts) {
 
 const THINKING_COLLAPSE_THRESHOLD = 500
 
-function HistoryItem({ item, isLast }) {
+function HistoryItem({ item, index, isLast }) {
   const { impact } = useHaptic()
   const [expanded, setExpanded] = useState(false)
   const [thinkingExpanded, setThinkingExpanded] = useState(false)
@@ -63,95 +63,116 @@ function HistoryItem({ item, isLast }) {
   const responsePreview = item.response_preview || ''
   const rawReply = responsePreview || item.reply_text || ''
   const normalizedReply = rawReply.replace(/\s+/g, ' ').trim()
-  const replyPreviewSummary = normalizedReply.slice(0, 80) + (normalizedReply.length > 80 ? '\u2026' : '')
+  const replyPreviewSummary = normalizedReply.slice(0, 80) + (normalizedReply.length > 80 ? '…' : '')
 
   return (
-    <div
-      style={{
-        position: 'relative',
-        borderBottom: isLast ? 'none' : '1px solid',
-        borderBottomColor: expanded ? 'var(--border-strong)' : 'var(--border)',
-        transition: 'border-bottom-color 200ms ease',
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: expanded ? '2px' : '0px',
-          background: 'var(--accent)',
-          transition: 'width 200ms ease',
-        }}
-      />
-      <div
+    <div style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}>
+      {/* ─── collapsed row: [index] [time] [preview] [chevron] ─── */}
+      <button
         onClick={() => { impact('light'); setExpanded(!expanded) }}
         style={{
+          width: '100%',
+          textAlign: 'left',
+          display: 'flex',
+          gap: '10px',
+          alignItems: 'center',
+          padding: '9px 2px',
+          background: 'transparent',
+          border: 'none',
           cursor: 'pointer',
-          padding: '12px 16px',
-          transition: 'background 150ms ease',
+          color: 'inherit',
+          fontFamily: 'inherit',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)' }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
       >
-        <div
+        <span
           style={{
-            fontSize: '13px',
-            color: 'var(--text)',
-            lineHeight: 1.5,
+            flexShrink: 0,
+            width: '18px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '9px',
+            color: 'var(--accent)',
+            letterSpacing: '0.1em',
+          }}
+        >
+          {String(index).padStart(2, '0')}
+        </span>
+        <span
+          style={{
+            flexShrink: 0,
+            width: '52px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '8.5px',
+            color: 'var(--text-secondary)',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {formatTime(item.ts || item.timestamp)}
+        </span>
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            marginBottom: '4px',
+            fontFamily: 'var(--font-serif)',
+            fontSize: '12px',
+            color: 'var(--text-muted)',
           }}
         >
           {normalizedReply
             ? replyPreviewSummary
             : <span style={{ color: 'var(--text-secondary)' }}>no reply</span>}
-        </div>
-        <div
+        </span>
+        <svg
+          width="7"
+          height="7"
+          viewBox="0 0 9 9"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '11px',
-            color: 'var(--text-muted)',
+            flexShrink: 0,
+            opacity: 0.55,
+            transition: 'transform 0.25s',
+            transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
           }}
         >
-          <span>{formatTime(item.ts || item.timestamp)}</span>
-          {toolCount > 0 && (
-            <>
-              <span>{'\u00b7'}</span>
-              <span>{toolCount} {toolCount === 1 ? 'tool' : 'tools'}</span>
-            </>
-          )}
-        </div>
-      </div>
+          <path d="M2 1L6 4.5L2 8" stroke="var(--text-muted)" strokeWidth="1" fill="none" strokeLinecap="round" />
+        </svg>
+      </button>
 
+      {/* ─── expanded detail ─── */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateRows: expanded ? '1fr' : '0fr',
-          transition: 'grid-template-rows 300ms ease-out',
+          maxHeight: expanded ? '9999px' : '0',
+          overflow: 'hidden',
+          transition: 'max-height 0.28s ease',
         }}
       >
-        <div style={{ overflow: 'hidden', minHeight: 0 }}>
         <div
-          className="text-sm"
           style={{
-            padding: '12px 16px 20px 16px',
-            borderTop: '1px solid var(--border)',
+            padding: '2px 0 14px 74px',
+            fontSize: '13px',
+            lineHeight: 1.75,
           }}
         >
           {thinkingPreview && (
-            <div className="mb-3">
-              <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>thinking</div>
+            <div style={{ marginBottom: '12px' }}>
+              <div
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  color: 'var(--accent)',
+                  marginBottom: '4px',
+                }}
+              >
+                thinking
+              </div>
               <div style={{ position: 'relative' }}>
                 <div
-                  className="text-xs leading-relaxed"
                   style={{
+                    fontFamily: 'var(--font-serif)',
+                    fontSize: '12px',
+                    lineHeight: 1.6,
                     color: 'var(--text-muted)',
                     whiteSpace: 'pre-wrap',
                     maxHeight: thinkingCollapsed ? '200px' : 'none',
@@ -169,7 +190,7 @@ function HistoryItem({ item, isLast }) {
                       bottom: 0,
                       height: '60px',
                       pointerEvents: 'none',
-                      background: 'linear-gradient(to bottom, rgba(0,0,0,0), var(--bg-card))',
+                      background: 'linear-gradient(to bottom, transparent, var(--bg))',
                     }}
                   />
                 )}
@@ -194,11 +215,25 @@ function HistoryItem({ item, isLast }) {
           )}
 
           {responsePreview && (
-            <div className="mb-1">
-              <div className="text-xs mb-1" style={{ color: 'var(--accent)' }}>reply</div>
+            <div style={{ marginBottom: '4px' }}>
               <div
-                className="text-sm leading-relaxed"
-                style={{ color: 'var(--text)', whiteSpace: 'pre-wrap' }}
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                  color: 'var(--accent)',
+                  marginBottom: '4px',
+                }}
+              >
+                reply
+              </div>
+              <div
+                style={{
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: '13px',
+                  lineHeight: 1.6,
+                  color: 'var(--text)',
+                  whiteSpace: 'pre-wrap',
+                }}
               >
                 {responsePreview}
               </div>
@@ -206,7 +241,13 @@ function HistoryItem({ item, isLast }) {
           )}
 
           {!toolCount && !hasPalaceWrites && !thinkingPreview && !responsePreview && (
-            <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                color: 'var(--text-secondary)',
+              }}
+            >
               no details
             </div>
           )}
@@ -217,7 +258,7 @@ function HistoryItem({ item, isLast }) {
                 marginTop: '12px',
                 paddingTop: '10px',
                 borderTop: '1px solid var(--border)',
-                fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+                fontFamily: 'var(--font-mono)',
                 fontSize: '11px',
                 color: 'var(--text-secondary)',
                 lineHeight: 1.6,
@@ -225,17 +266,17 @@ function HistoryItem({ item, isLast }) {
             >
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0 10px' }}>
                 <span>in {inputTokens.toLocaleString()}</span>
-                <span>{'\u00b7'}</span>
+                <span>{'·'}</span>
                 <span>out {outputTokens.toLocaleString()}</span>
                 {rounds != null && (
                   <>
-                    <span>{'\u00b7'}</span>
+                    <span>{'·'}</span>
                     <span>{rounds} rounds</span>
                   </>
                 )}
                 {hasPalaceWrites && (
                   <>
-                    <span>{'\u00b7'}</span>
+                    <span>{'·'}</span>
                     <span>{typeof rawPalaceWrites === 'string' ? rawPalaceWrites : formatPalaceWrites(rawPalaceWrites)}</span>
                   </>
                 )}
@@ -250,7 +291,6 @@ function HistoryItem({ item, isLast }) {
             </div>
           )}
         </div>
-        </div>
       </div>
     </div>
   )
@@ -258,46 +298,119 @@ function HistoryItem({ item, isLast }) {
 
 export default function HistoryList({ items, onRefresh, loading }) {
   const { impact } = useHaptic()
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
   return (
-    <div style={{ position: 'relative' }}>
-      <button
-        onClick={(e) => { e.stopPropagation(); impact('medium'); onRefresh() }}
-        disabled={loading}
-        aria-label="refresh history"
+    <div style={{ borderTop: '1px solid var(--border-strong)', paddingTop: '10px' }}>
+      {/* ─── drawer header ─── */}
+      <div
         style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          background: 'transparent',
-          border: 'none',
-          padding: '6px',
-          cursor: loading ? 'default' : 'pointer',
-          opacity: loading ? 0.3 : 0.6,
-          transition: 'opacity 150ms ease',
-          zIndex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 0',
         }}
-        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = '1' }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6' }}
       >
-        <IconRefresh color="var(--text-muted)" />
-      </button>
-      {items.length === 0 ? (
-        <div className="card p-5 text-center">
-          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            no history
+        <button
+          onClick={() => { impact('light'); setDrawerOpen(!drawerOpen) }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flex: 1,
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            color: 'inherit',
+          }}
+        >
+          <svg
+            width="9"
+            height="9"
+            viewBox="0 0 9 9"
+            style={{
+              transition: 'transform 0.25s',
+              transform: drawerOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+            }}
+          >
+            <path d="M2 1L6 4.5L2 8" stroke="var(--text-muted)" strokeWidth="1" fill="none" strokeLinecap="round" />
+          </svg>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '9px',
+              letterSpacing: '0.32em',
+              textTransform: 'uppercase',
+              color: 'var(--accent)',
+            }}
+          >
+            history
           </span>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '9px',
+              letterSpacing: '0.2em',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            · {items.length}
+          </span>
+          <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); impact('medium'); onRefresh() }}
+          disabled={loading}
+          aria-label="refresh history"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: '4px',
+            cursor: loading ? 'default' : 'pointer',
+            opacity: loading ? 0.3 : 0.5,
+            transition: 'opacity 150ms ease',
+            flexShrink: 0,
+          }}
+        >
+          <IconRefresh color="var(--text-muted)" />
+        </button>
+      </div>
+
+      {/* ─── drawer content ─── */}
+      <div
+        style={{
+          maxHeight: drawerOpen ? '9999px' : '0',
+          overflow: 'hidden',
+          transition: 'max-height 0.35s ease',
+        }}
+      >
+        <div style={{ paddingTop: '4px' }}>
+          {items.length === 0 ? (
+            <div
+              style={{
+                padding: '16px 0',
+                textAlign: 'center',
+                fontFamily: 'var(--font-serif)',
+                fontSize: '12.5px',
+                fontStyle: 'italic',
+                color: 'var(--text-muted)',
+              }}
+            >
+              no history
+            </div>
+          ) : (
+            items.map((item, i) => (
+              <HistoryItem
+                key={item.id || i}
+                item={item}
+                index={i + 1}
+                isLast={i === items.length - 1}
+              />
+            ))
+          )}
         </div>
-      ) : (
-        <div className="card">
-          {items.map((item, i) => (
-            <HistoryItem
-              key={item.id || i}
-              item={item}
-              isLast={i === items.length - 1}
-            />
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   )
 }
