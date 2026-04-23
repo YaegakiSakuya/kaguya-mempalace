@@ -3,7 +3,7 @@ import useTelegram from '../../hooks/useTelegram'
 import useApi from '../../hooks/useApi'
 import useHaptic from '../../hooks/useHaptic'
 
-const TOAST_FAIL_COLOR = '#C44'
+const TOAST_FAIL_COLOR = 'var(--fail)'
 
 const rowStyle = {
   display: 'flex',

@@ -36,7 +36,6 @@ function syncThemeToRoot(theme) {
   r.setProperty('--accent-dim', theme.accentSoft)
   r.setProperty('--border', theme.ruleSoft)
   r.setProperty('--border-strong', theme.rule)
-  r.setProperty('--fail', theme.accent)
   r.setProperty('--font-display', theme.font.display)
   r.setProperty('--font-serif', theme.font.body)
   r.setProperty('--font-mono', theme.font.meta)
