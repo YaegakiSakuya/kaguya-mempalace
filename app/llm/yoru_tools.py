@@ -500,14 +500,37 @@ _LOG_SAFE_KEYS = frozenset({
 _LOG_REDACTED_KEYS = frozenset({"na", "za", "ki", "koe"})
 
 
+def _redact_zu_ids(value: Any) -> Any:
+    # zu_ids 升级后每项可能是 {zu_id, note?},note 与 ki/koe 同级私密,必须脱敏。
+    # 旧格式 (纯 int 列表) 原样保留,兼容历史 payload。
+    if not isinstance(value, list):
+        return value
+    out: list[Any] = []
+    for item in value:
+        if isinstance(item, dict):
+            cleaned: dict[str, Any] = {}
+            for k, v in item.items():
+                if k == "note" and isinstance(v, str):
+                    cleaned[k] = f"<redacted:{len(v)}chars>"
+                else:
+                    cleaned[k] = v
+            out.append(cleaned)
+        else:
+            out.append(item)
+    return out
+
+
 def summarize_yoru_args(args: dict[str, Any]) -> dict[str, Any]:
     """Return a redacted args dict safe to persist into tool_calls.jsonl / SSE.
 
     Whitelist 策略: 只保留 metadata 字段;na/za/ki/koe 这种自由文本只留长度。
+    zu_ids 走单独路径,内部 note 同样脱敏。
     """
     out: dict[str, Any] = {}
     for k, v in (args or {}).items():
-        if k in _LOG_SAFE_KEYS:
+        if k == "zu_ids":
+            out[k] = _redact_zu_ids(v)
+        elif k in _LOG_SAFE_KEYS:
             out[k] = v
         elif k in _LOG_REDACTED_KEYS and isinstance(v, str):
             out[k] = f"<redacted:{len(v)}chars>"
