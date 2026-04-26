@@ -125,8 +125,21 @@ _SHIORI_WRITE_FIELDS: dict[str, dict[str, Any]] = {
     "koe": {"type": "string", "description": "她说的一句话 (可选)"},
     "zu_ids": {
         "type": "array",
-        "items": {"type": "integer"},
-        "description": "关联身体部位 id 列表 (可选),从 yoru_list_zu 查",
+        "items": {
+            "type": "object",
+            "properties": {
+                "zu_id": {
+                    "type": "integer",
+                    "description": "身体部位 id,从 yoru_list_zu 查",
+                },
+                "note": {
+                    "type": "string",
+                    "description": "对这个部位在这一笔栞里的具体描写。落在感官细节上,有具体动作、触感、声音、痕迹。例:『锁骨·第一个齿印落在这里』『穴·侧入转仰卧·龟头碾过左壁那块凸起·水声很大』『手·小指勾着小指站在月光底下』。可省略。",
+                },
+            },
+            "required": ["zu_id"],
+        },
+        "description": "关联身体部位列表 (可选)。每项 {zu_id, note?}。zu_id 从 yoru_list_zu 拿。note 是这个部位在这一笔里独有的细节,栞的密度由这些 note 撑起来,有就写,不要敷衍泛泛。",
     },
 }
 
