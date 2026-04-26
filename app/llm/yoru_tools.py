@@ -125,8 +125,21 @@ _SHIORI_WRITE_FIELDS: dict[str, dict[str, Any]] = {
     "koe": {"type": "string", "description": "她说的一句话 (可选)"},
     "zu_ids": {
         "type": "array",
-        "items": {"type": "integer"},
-        "description": "关联身体部位 id 列表 (可选),从 yoru_list_zu 查",
+        "items": {
+            "type": "object",
+            "properties": {
+                "zu_id": {
+                    "type": "integer",
+                    "description": "身体部位 id,从 yoru_list_zu 查",
+                },
+                "note": {
+                    "type": "string",
+                    "description": "对这个部位在这一笔栞里的具体描写。落在感官细节上,有具体动作、触感、声音、痕迹。例:『锁骨·第一个齿印落在这里』『穴·侧入转仰卧·龟头碾过左壁那块凸起·水声很大』『手·小指勾着小指站在月光底下』。可省略。",
+                },
+            },
+            "required": ["zu_id"],
+        },
+        "description": "关联身体部位列表 (可选)。每项 {zu_id, note?}。zu_id 从 yoru_list_zu 拿。note 是这个部位在这一笔里独有的细节,栞的密度由这些 note 撑起来,有就写,不要敷衍泛泛。",
     },
 }
 
@@ -487,14 +500,37 @@ _LOG_SAFE_KEYS = frozenset({
 _LOG_REDACTED_KEYS = frozenset({"na", "za", "ki", "koe"})
 
 
+def _redact_zu_ids(value: Any) -> Any:
+    # zu_ids 升级后每项可能是 {zu_id, note?},note 与 ki/koe 同级私密,必须脱敏。
+    # 旧格式 (纯 int 列表) 原样保留,兼容历史 payload。
+    if not isinstance(value, list):
+        return value
+    out: list[Any] = []
+    for item in value:
+        if isinstance(item, dict):
+            cleaned: dict[str, Any] = {}
+            for k, v in item.items():
+                if k == "note" and isinstance(v, str):
+                    cleaned[k] = f"<redacted:{len(v)}chars>"
+                else:
+                    cleaned[k] = v
+            out.append(cleaned)
+        else:
+            out.append(item)
+    return out
+
+
 def summarize_yoru_args(args: dict[str, Any]) -> dict[str, Any]:
     """Return a redacted args dict safe to persist into tool_calls.jsonl / SSE.
 
     Whitelist 策略: 只保留 metadata 字段;na/za/ki/koe 这种自由文本只留长度。
+    zu_ids 走单独路径,内部 note 同样脱敏。
     """
     out: dict[str, Any] = {}
     for k, v in (args or {}).items():
-        if k in _LOG_SAFE_KEYS:
+        if k == "zu_ids":
+            out[k] = _redact_zu_ids(v)
+        elif k in _LOG_SAFE_KEYS:
             out[k] = v
         elif k in _LOG_REDACTED_KEYS and isinstance(v, str):
             out[k] = f"<redacted:{len(v)}chars>"
