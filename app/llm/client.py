@@ -633,7 +633,7 @@ def _run_tool_loop(
                 log_args = (
                     summarize_yoru_args(args_dict)
                     if tool_name in YORU_TOOL_NAMES
-                    else summarize_shizuku_args(tool_name, args_dict)
+                    else summarize_shizuku_args(args_dict)
                     if tool_name in SHIZUKU_TOOL_NAMES
                     else args_dict
                 )

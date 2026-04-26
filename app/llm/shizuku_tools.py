@@ -483,11 +483,10 @@ _LOG_SAFE_KEYS = frozenset({
 _LOG_REDACTED_KEYS = frozenset({"na", "za", "sora", "ki", "koe", "body"})
 
 
-def summarize_shizuku_args(name: str, args: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+def summarize_shizuku_args(args: dict[str, Any]) -> dict[str, Any]:
     """Return a redacted args dict safe to persist into tool_calls.jsonl / SSE."""
-    source = args if args is not None else {}
     out: dict[str, Any] = {}
-    for k, v in (source or {}).items():
+    for k, v in (args or {}).items():
         if k in _LOG_SAFE_KEYS:
             out[k] = v
         elif k in _LOG_REDACTED_KEYS and isinstance(v, str):
