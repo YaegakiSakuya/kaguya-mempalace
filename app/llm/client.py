@@ -28,6 +28,11 @@ from app.llm.voice_tools import (
     execute_voice_tool,
     VOICE_TOOL_NAMES,
 )
+from app.llm.yoru_tools import (
+    build_yoru_openai_tools,
+    execute_yoru_tool,
+    YORU_TOOL_NAMES,
+)
 from app.memory.palace import load_recent_diary
 from app.memory.tools import OPENAI_TOOLS, execute_tool
 from app.miniapp.sse import sse_manager
@@ -528,7 +533,7 @@ def _run_tool_loop(
 
     result = ToolLoopResult(reply_text="")
 
-    all_tools = OPENAI_TOOLS + build_ops_openai_tools() + build_web_openai_tools() + build_voice_openai_tools()
+    all_tools = OPENAI_TOOLS + build_ops_openai_tools() + build_web_openai_tools() + build_voice_openai_tools() + build_yoru_openai_tools()
 
     loop_start = time.monotonic()
 
@@ -629,6 +634,8 @@ def _run_tool_loop(
                             chat_id=str(chat_id),
                             settings=settings,
                         )
+                    elif tool_name in YORU_TOOL_NAMES:
+                        tool_result = execute_yoru_tool(tool_name, args_dict)
                     else:
                         tool_result = execute_tool(
                             tool_name=tool_name,
