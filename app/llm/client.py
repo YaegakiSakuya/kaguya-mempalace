@@ -28,6 +28,12 @@ from app.llm.voice_tools import (
     execute_voice_tool,
     VOICE_TOOL_NAMES,
 )
+from app.llm.yoru_tools import (
+    build_yoru_openai_tools,
+    execute_yoru_tool,
+    summarize_yoru_args,
+    YORU_TOOL_NAMES,
+)
 from app.memory.palace import load_recent_diary
 from app.memory.tools import OPENAI_TOOLS, execute_tool
 from app.miniapp.sse import sse_manager
@@ -510,6 +516,8 @@ def _run_tool_loop(
     messages: list[dict],
     max_tool_rounds: int,
     log_context: dict | None = None,
+    *,
+    include_yoru_tools: bool = True,
 ) -> ToolLoopResult:
     # Snapshot the runtime-config LLM settings once per tool loop so the client,
     # base URL and model stay consistent across rounds even if the operator
@@ -528,7 +536,12 @@ def _run_tool_loop(
 
     result = ToolLoopResult(reply_text="")
 
+    # Yoru 写工具 (create/update/delete shiori) 只允许在用户回复回合暴露,
+    # autosave checkpoint 不带 yoru —— checkpoint 是后台无人值守的回合,
+    # description 写的"只在朔夜明确说『记下来』时才调用"靠的就是工具不出现。
     all_tools = OPENAI_TOOLS + build_ops_openai_tools() + build_web_openai_tools() + build_voice_openai_tools()
+    if include_yoru_tools:
+        all_tools = all_tools + build_yoru_openai_tools()
 
     loop_start = time.monotonic()
 
@@ -605,11 +618,20 @@ def _run_tool_loop(
                 except json.JSONDecodeError:
                     args_dict = {}
 
+                # Yoru 写工具的 na/ki/koe 是私密自由文本,日志/SSE 都要脱敏,
+                # 不能依赖 inspector.logger.summarize_arguments 的 unknown-tool
+                # fallback (它会保留 <200 字符的字符串原样)。
+                log_args = (
+                    summarize_yoru_args(args_dict)
+                    if tool_name in YORU_TOOL_NAMES
+                    else args_dict
+                )
+
                 if sse_manager.has_active_connection():
                     sse_manager.push("tool_call", {
                         "tool": tool_name,
                         "round": round_index + 1,
-                        "args_summary": summarize_arguments(tool_name, args_dict),
+                        "args_summary": summarize_arguments(tool_name, log_args),
                     })
 
                 t0 = time.monotonic()
@@ -629,6 +651,8 @@ def _run_tool_loop(
                             chat_id=str(chat_id),
                             settings=settings,
                         )
+                    elif tool_name in YORU_TOOL_NAMES:
+                        tool_result = execute_yoru_tool(tool_name, args_dict)
                     else:
                         tool_result = execute_tool(
                             tool_name=tool_name,
@@ -665,7 +689,7 @@ def _run_tool_loop(
                     "chat_id": chat_id,
                     "round": round_index + 1,
                     "tool_name": tool_name,
-                    "arguments_summary": summarize_arguments(tool_name, args_dict),
+                    "arguments_summary": summarize_arguments(tool_name, log_args),
                     "success": success,
                     "result_chars": len(tool_result or ""),
                     "elapsed_ms": elapsed_ms,
@@ -758,4 +782,5 @@ def run_memory_checkpoint(
         messages=messages,
         max_tool_rounds=max_tool_rounds,
         log_context={"turn_type": "checkpoint", "chat_id": chat_id},
+        include_yoru_tools=False,
     )
