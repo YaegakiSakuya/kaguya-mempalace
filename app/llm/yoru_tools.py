@@ -468,3 +468,35 @@ def execute_yoru_tool(name: str, args: dict[str, Any]) -> str:
     except Exception as exc:
         logger.exception("yoru tool execution failed name=%s", name)
         return _format_error(f"{type(exc).__name__}: {exc}")
+
+
+# ====================== Argument redaction for tool-call logging ======================
+# 栞的散文 (ki) / 她说的话 (koe) / 诗名 (na) / 地点 (za) 都是高度私密的自由文本,
+# 不能进 jsonl 操作日志。这里给一份 yoru 专属白名单,只保留 metadata 类字段
+# (id / 计数 / 评分 / 时间 / 类别),自由文本一律丢弃,长字符串只返回长度提示。
+# 由 client.py 在 dispatch 时显式调用,绕过 inspector.logger.summarize_arguments
+# 的 unknown-tool fallback (它会把 <200 字符的字符串原样保留)。
+
+_LOG_SAFE_KEYS = frozenset({
+    "shiori_id", "te_id", "zu_ids",
+    "koyomi", "month", "year_month", "limit",
+    "category", "zone",
+    "suna", "hoshi_s", "hoshi_k", "shio", "sha", "cho",
+})
+
+_LOG_REDACTED_KEYS = frozenset({"na", "za", "ki", "koe"})
+
+
+def summarize_yoru_args(args: dict[str, Any]) -> dict[str, Any]:
+    """Return a redacted args dict safe to persist into tool_calls.jsonl / SSE.
+
+    Whitelist 策略: 只保留 metadata 字段;na/za/ki/koe 这种自由文本只留长度。
+    """
+    out: dict[str, Any] = {}
+    for k, v in (args or {}).items():
+        if k in _LOG_SAFE_KEYS:
+            out[k] = v
+        elif k in _LOG_REDACTED_KEYS and isinstance(v, str):
+            out[k] = f"<redacted:{len(v)}chars>"
+        # 未知 key 直接丢弃,不冒险落盘
+    return out
