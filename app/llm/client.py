@@ -34,6 +34,12 @@ from app.llm.yoru_tools import (
     summarize_yoru_args,
     YORU_TOOL_NAMES,
 )
+from app.llm.shizuku_tools import (
+    build_shizuku_openai_tools,
+    execute_shizuku_tool,
+    summarize_shizuku_args,
+    SHIZUKU_TOOL_NAMES,
+)
 from app.memory.palace import load_recent_diary
 from app.memory.tools import OPENAI_TOOLS, execute_tool
 from app.miniapp.sse import sse_manager
@@ -518,6 +524,7 @@ def _run_tool_loop(
     log_context: dict | None = None,
     *,
     include_yoru_tools: bool = True,
+    include_shizuku_tools: bool = True,
 ) -> ToolLoopResult:
     # Snapshot the runtime-config LLM settings once per tool loop so the client,
     # base URL and model stay consistent across rounds even if the operator
@@ -542,6 +549,8 @@ def _run_tool_loop(
     all_tools = OPENAI_TOOLS + build_ops_openai_tools() + build_web_openai_tools() + build_voice_openai_tools()
     if include_yoru_tools:
         all_tools = all_tools + build_yoru_openai_tools()
+    if include_shizuku_tools:
+        all_tools = all_tools + build_shizuku_openai_tools()
 
     loop_start = time.monotonic()
 
@@ -624,6 +633,8 @@ def _run_tool_loop(
                 log_args = (
                     summarize_yoru_args(args_dict)
                     if tool_name in YORU_TOOL_NAMES
+                    else summarize_shizuku_args(tool_name, args_dict)
+                    if tool_name in SHIZUKU_TOOL_NAMES
                     else args_dict
                 )
 
@@ -653,6 +664,8 @@ def _run_tool_loop(
                         )
                     elif tool_name in YORU_TOOL_NAMES:
                         tool_result = execute_yoru_tool(tool_name, args_dict)
+                    elif tool_name in SHIZUKU_TOOL_NAMES:
+                        tool_result = execute_shizuku_tool(tool_name, args_dict)
                     else:
                         tool_result = execute_tool(
                             tool_name=tool_name,
@@ -783,4 +796,5 @@ def run_memory_checkpoint(
         max_tool_rounds=max_tool_rounds,
         log_context={"turn_type": "checkpoint", "chat_id": chat_id},
         include_yoru_tools=False,
+        include_shizuku_tools=False,
     )
